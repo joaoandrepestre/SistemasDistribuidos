@@ -18,7 +18,7 @@ int main(int argc, char **argv){
 
     // Checa se o processo escolhido existe
     // Envio de sinal NULL ao processo falha se o processo não existe
-    if(kill(pid, 0) == -1){
+    if(kill(pid, 0) != 0){
         printf("Processo %d não existe. Forneça o PID de um processo existente.\n", pid);
         return -1;
     }
@@ -26,11 +26,13 @@ int main(int argc, char **argv){
     // Envia o sinal ao processo escolhido
     err = kill(pid, sig);
 
-    if(err == -1){
+    // Caso ocorra um erro no envio
+    if(err != 0){
         printf("Ocorreu um erro no envio do sinal.\n");
         return -1;
     }
 
+    // Caso não ocorra
     printf("Sinal %d enviado ao processo %d.\n", sig, pid);
     return 0;
 }
