@@ -41,6 +41,7 @@ int main(int argc, char **argv){
     // Verifica erro de fork
     if(fork_ret < 0){
         printf("Falha na bifurcação do processo.\n");
+        return -1;
     }
 
     // Processo pai(agindo como produtor)
@@ -113,8 +114,6 @@ int main(int argc, char **argv){
         printf("Zero recebido, terminando processo.\n");
         exit(0);
     }
-
-
 
     return 0;
 }
