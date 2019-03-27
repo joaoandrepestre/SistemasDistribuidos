@@ -28,8 +28,8 @@ int main(int argc, char **argv){
 
     // Checa se os parâmetros esperados foram passados
     if(argc < 2){
-        printf("Forneça a quantidade de números a serem gerados.\n");
-        return -1;
+        fprintf(stderr,"Forneça a quantidade de números a serem gerados.\n");
+        exit(1);
     }
 
     // Recupera os parâmetros
@@ -40,12 +40,12 @@ int main(int argc, char **argv){
 
     // Verifica erro de fork
     if(fork_ret < 0){
-        printf("Falha na bifurcação do processo.\n");
-        return -1;
+        fprintf(stderr,"Falha na bifurcação do processo.\n");
+        exit(1);
     }
 
     // Processo pai(agindo como produtor)
-    if(fork_ret > 0){
+    if(fork_ret != 0){
 
         int randNum, i;
         char msgSend[20];

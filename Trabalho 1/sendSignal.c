@@ -8,8 +8,8 @@ int main(int argc, char **argv){
 
     // Checa se os parâmetros esperados foram passados
     if(argc!=3){
-        printf("Número de parâmetros incorreto. Forneça o PID e o Sinal desejado.\n");
-        return -1;
+        fprintf(stderr,"Número de parâmetros incorreto. Forneça o PID e o Sinal desejado.\n");
+        exit(1);
     }
 
     // Recupera os parâmetros passados
@@ -19,8 +19,8 @@ int main(int argc, char **argv){
     // Checa se o processo escolhido existe
     // Envio de sinal NULL ao processo falha se o processo não existe
     if(kill(pid, 0) != 0){
-        printf("Processo %d não existe. Forneça o PID de um processo existente.\n", pid);
-        return -1;
+        fprintf(stderr,"Processo %d não existe. Forneça o PID de um processo existente.\n", pid);
+        exit(1);
     }
 
     // Envia o sinal ao processo escolhido
@@ -28,11 +28,11 @@ int main(int argc, char **argv){
 
     // Caso ocorra um erro no envio
     if(err != 0){
-        printf("Ocorreu um erro no envio do sinal.\n");
-        return -1;
+        fprintf(stderr,"Ocorreu um erro no envio do sinal.\n");
+        exit(1);
     }
 
     // Caso não ocorra
     printf("Sinal %d enviado ao processo %d.\n", sig, pid);
-    return 0;
+    exit(0);
 }

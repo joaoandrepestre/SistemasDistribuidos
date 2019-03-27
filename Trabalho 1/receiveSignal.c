@@ -36,8 +36,8 @@ int main(int argc, char **argv){
 
     // Checa se os parâmetros esperados foram passados
     if(argc<2){
-        printf("Forneça o tipo de wait esperado.\nbusy: 0 ou blocking: 1.\n");
-        return -1;
+        fprintf(stderr,"Forneça o tipo de wait esperado.\nbusy: 0 ou blocking: 1.\n");
+        exit(1);
     }
 
     // Recupera os parâmetros passados
@@ -65,8 +65,8 @@ int main(int argc, char **argv){
             }
             break;
         default: // inexistente
-            printf("Tipo de wait desconhecido.\nEscolha entre busy: 0 ou blocking: 1.\n");
-            return -1;
+            fprintf(stderr,"Tipo de wait desconhecido.\nEscolha entre busy: 0 ou blocking: 1.\n");
+            exit(1);
     }
 
     return 0;
