@@ -89,7 +89,7 @@ int main(int argc, char const *argv[]) {
         // Lê a resposta do consumidor (tamanho da resposta é de 1 byte mais o string terminator \0)
 		read(sock, buffer, 2);
 
-		if(strcmp(buffer, "1") == 0) {
+		if(strcmp(buffer, PRIMO) == 0) {
 			printf("Número %d é primo\n", numero_aleatorio);
 		} else {
 			printf("Número %d não é primo\n", numero_aleatorio);
