@@ -59,7 +59,7 @@ int main(int argc, char **argv){
 
             // Gera número aleatório crescente
             randNum += rand()%100;
-            printf("Número %d gerado.\n", randNum);
+            printf("PRODUTOR: Número %d gerado.\n", randNum);
 
             // Define mensagem a ser enviada
             sprintf(msgSend, "%d", randNum);
@@ -76,7 +76,7 @@ int main(int argc, char **argv){
         close(pip[1]);
 
         // Termina processo
-        printf("Zero enviado, terminando processo.\n");
+        printf("PRODUTOR: Zero enviado, terminando processo.\n");
         exit(0);
     } 
     // Processo filho (agindo como consumidor)
@@ -96,11 +96,11 @@ int main(int argc, char **argv){
         while(num != 0){
 
             // Informa o número recebido
-            printf("Número %d recebido.\n", num);
+            printf("CONSUMIDOR: Número %d recebido.\n", num);
 
             // Checa se o número é primo
-            if(numeroPrimo(num)) printf("O número %d é primo.\n", num);
-            else printf("O número %d não é primo.\n", num);
+            if(numeroPrimo(num)) printf("CONSUMIDOR: O número %d é primo.\n", num);
+            else printf("CONSUMIDOR: O número %d não é primo.\n", num);
 
             // Lê o próximo número da ponta de leitura do pipe
             read(pip[0], msgRec, 20);
@@ -111,7 +111,7 @@ int main(int argc, char **argv){
         close(pip[0]);
 
         // Termina o processo
-        printf("Zero recebido, terminando processo.\n");
+        printf("CONSUMIDOR: Zero recebido, terminando processo.\n");
         exit(0);
     }
 
