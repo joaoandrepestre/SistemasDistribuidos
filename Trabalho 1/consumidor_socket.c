@@ -4,9 +4,11 @@
 #include <netinet/in.h> 
 #include <string.h> 
 
+#define TERMINATE "0"
+#define BUFFER_SIZE 20
 #define PORT 8080 
-   
-int numeroPrimo(int num){
+
+int numeroPrimo(int num) {
     int i;
     
     for(i = 2;i < num; i++) {
@@ -16,20 +18,20 @@ int numeroPrimo(int num){
     return 1;
 }
 
-int main(int argc, char const *argv[]) 
-{ 
-
+int main(int argc, char const *argv[]) { 
     char resposta[1];
     int num_analisado;
 
-    /* Início do código de conexão com sockets
-    retirado de: https://www.geeksforgeeks.org/socket-programming-cc/ */
+    /*
+     *  Início do código de conexão com sockets
+     *  Retirado de: https://www.geeksforgeeks.org/socket-programming-cc/
+     */
 
     int server_fd, new_socket, valread; 
     struct sockaddr_in address; 
     int opt = 1; 
     int addrlen = sizeof(address); 
-    char buffer[1024] = {0};  
+    char buffer[BUFFER_SIZE] = {0};  
 
 	// Creating socket file descriptor 
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)  { 
@@ -63,23 +65,30 @@ int main(int argc, char const *argv[])
         exit(EXIT_FAILURE); 
     }
 
-   	valread = read(new_socket, buffer, 1024);
-	printf("%s\n", buffer);
+    /*
+     *  Fim do código de conexão com sockets
+     *  Retirado de: https://www.geeksforgeeks.org/socket-programming-cc/
+     */ 
 
-    /* Fim do código de conexão com sockets
-    retirado de: https://www.geeksforgeeks.org/socket-programming-cc/ */ 
+    // Read bloqueante que recebe uma mensagem qualquer do produtor
+    // Serve apenas para realizar uma sinconização inicial entre os dois programas
+   	read(new_socket, buffer, BUFFER_SIZE);
     
-    while(strcmp(buffer, "0") && read(new_socket , buffer, 1024) != -1) {
+    // Loop que lê o buffer enquanto o file descriptor existir ou até ele receber um sinal TERMINATE
+    while(read(new_socket , buffer, BUFFER_SIZE) != -1 && strcmp(buffer, TERMINATE)) {
         printf("Número recebido %s\n", buffer);
         
+        // Função que transforma string em um número da base 10
         num_analisado = strtol(buffer, NULL, 10);
 
+        // Função que imprime em um buffer auxiliar de tamanho reduzido (1 byte) a resposta do servidor
         sprintf(resposta, "%d", numeroPrimo(num_analisado));
 
+        // Função de envio da resposta ao produtor
         send(new_socket, resposta, 2, 0);
     }
 
-    printf("Fechando conexão com o produtor\n");
+    printf("Mensagem TERMINATE recebida do produtor\nFechando conexão\n");
     
     return 0; 
 } 

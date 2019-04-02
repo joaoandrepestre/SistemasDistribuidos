@@ -7,13 +7,16 @@
 #include <time.h>
 #include<arpa/inet.h>
 
-
+#define CONEXAO_ESTABELECIDA "1"
+#define BUFFER_SIZE 20
+#define TERMINATE "0"
+#define PRIMO "1"
+#define NAO_PRIMO "0"
 #define PORT 8080
 
 int main(int argc, char const *argv[]) { 
-
     int quantidade_num_gerados;
-    char str_num_gerado[20];
+    char str_num_gerado[BUFFER_SIZE];
 
 	// Inicia gerador de números aleatórios
     time_t seed;
@@ -27,14 +30,16 @@ int main(int argc, char const *argv[]) {
 
 	quantidade_num_gerados = atoi(argv[1]);
 
-    /* Início do código de conexão com sockets
-    retirado de: https://www.geeksforgeeks.org/socket-programming-cc/ */
+    /*
+     *  Início do código de conexão com sockets
+     *  Retirado de: https://www.geeksforgeeks.org/socket-programming-cc/
+     */
 
     struct sockaddr_in address; 
     int sock = 0, valread; 
     struct sockaddr_in serv_addr; 
-    char *hello = "Conectado ao produtor"; 
-    char buffer[1024] = {0};
+    char *hello = CONEXAO_ESTABELECIDA; 
+    char buffer[BUFFER_SIZE] = {0};
 
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) { 
         printf("\n Socket creation error \n"); 
@@ -47,36 +52,42 @@ int main(int argc, char const *argv[]) {
     serv_addr.sin_port = htons(PORT); 
        
     // Convert IPv4 and IPv6 addresses from text to binary form 
-    if(inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr)<=0)  
-    { 
+    if(inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr)<=0) { 
         printf("\nInvalid address/ Address not supported \n"); 
         return -1; 
     } 
    
-    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) 
-    { 
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) { 
         printf("\nConnection Failed \n"); 
         return -1; 
     } 
 
-    send(sock , hello , strlen(hello) , 0 );
+    /*
+     *  Fim do código de conexão com sockets
+     *  Retirado de: https://www.geeksforgeeks.org/socket-programming-cc/
+     */
 
-    /* Fim do código de conexão com sockets
-    retirado de: https://www.geeksforgeeks.org/socket-programming-cc/ */
+    // Função de escrita no canal de comunicação entre os sockets
+    // O conteúdo da mensagem nesse caso não importa pois a mensagem é enviada apenas para
+    // a confirmação da conexão e sincronização inicial entre os processos a partir de chamadas
+    // bloqueantes
+    send(sock , CONEXAO_ESTABELECIDA, BUFFER_SIZE, 0);
 
+    // Loop de geração de números
 	int i;
-    for(i = 0; i < quantidade_num_gerados; i++){
-
+    for(i = 0; i < quantidade_num_gerados; i++) {
         // Gera número aleatório crescente
         numero_aleatorio += rand()%100;
-        printf("Número %d gerado.\n", numero_aleatorio);
+        printf("Número %d gerado\n", numero_aleatorio);
 
         // Define mensagem a ser enviada
         sprintf(str_num_gerado, "%d", numero_aleatorio);
 
-	    send(sock, str_num_gerado , strlen(str_num_gerado)+1 , 0);
+        // Envia o número para o consumidor
+	    send(sock, str_num_gerado, BUFFER_SIZE , 0);
 
-		valread = read(sock, buffer, 2);
+        // Lê a resposta do consumidor (tamanho da resposta é de 1 byte mais o string terminator \0)
+		read(sock, buffer, 2);
 
 		if(strcmp(buffer, "1") == 0) {
 			printf("Número %d é primo\n", numero_aleatorio);
@@ -85,9 +96,10 @@ int main(int argc, char const *argv[]) {
 		}
     }    
 
-	send(sock , "0", 2 , 0);
+    // Envia ao consumidor o pedido para fechar a conexão (tamanho da requisição é de 1 byte mais o string terminator \0)
+	send(sock, TERMINATE, 2 , 0);
 
-    printf("Quantidade máxima de números atingida. Terminando conexão com consumidor.\n");
+    printf("Quantidade máxima de números atingida\nEnviando mensagem ao consumidor para fechar a conexão\n");
     
 	return 0; 
 } 
