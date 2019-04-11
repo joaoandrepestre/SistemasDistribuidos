@@ -48,7 +48,7 @@ int main(int argc, char **argv){
         case 0: 
             // busy
             printf("Tipo de wait: busy.\n");
-            printf("Processo %d esperando sinais 14, 50 ou 60.\n", pid);
+            printf("Processo %d esperando sinais 14, 54 ou 60.\n", pid);
             
             // Espera infinita ocupando a CPU
             while(1);
@@ -57,7 +57,7 @@ int main(int argc, char **argv){
         case 1: 
             // blocking
             printf("Tipo de wait: blocking.\n");
-            printf("Processo %d esperando sinais 14, 50 ou 60.\n", pid);
+            printf("Processo %d esperando sinais 14, 54 ou 60.\n", pid);
 
             // Espera até a chegada de um sinal para ocupar a CPU
             while(1){
