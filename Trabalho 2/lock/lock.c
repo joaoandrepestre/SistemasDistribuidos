@@ -15,6 +15,6 @@ void acquire(Lock *lock){
 
 // Implementa função de release lock
 void release(Lock *lock){
-    //__sync_synchronize();
+    __sync_synchronize();
     lock->held = 0;
 }
