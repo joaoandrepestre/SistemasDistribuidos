@@ -65,9 +65,12 @@ int main(int argc, char **argv){
         printf("Somatórios de %d valores.\n", N);
         for(K=1;K<=256;K*=2){
             start = clock();
-            realizaSomatorio(N);
+            int i;
+            for(i=0;i<10;i++){
+                realizaSomatorio(N);
+            }
             end = clock();
-            tempo_cpu = ((double) (end-start)) / CLOCKS_PER_SEC;
+            tempo_cpu = ((double) (end-start)) / (CLOCKS_PER_SEC*10);
             printf("\tSomatório usando %d threads: %lld. Levou %2f segundos.\n",K, somatorio, tempo_cpu);
         }
         printf("\n");
@@ -123,14 +126,19 @@ void realizaSomatorio(int N){
     // Cria threads
     pthread_t threads[K];
 
+    // Inicia atributos de thread
     pthread_attr_t attr;
     pthread_attr_init(&attr);
 
     long i;
     for(i=0;i<K;i++){
+
+        // Aloca cada thread em uma CPU diferente
         CPU_ZERO(&cpus);
-        CPU_SET(i%6, &cpus);
+        CPU_SET(i%4, &cpus);
         pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+        
+        // Cria a thread i
         pthread_create(&threads[i], &attr, somador_thread, (void*) i);
     }
     
