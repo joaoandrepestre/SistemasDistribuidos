@@ -1,8 +1,11 @@
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <time.h>
 #include <pthread.h>
+#include <unistd.h>
+#include <sched.h>
 #include "./lock/lock.h"
 
 void* somador_thread(void* threadNum);
@@ -10,6 +13,8 @@ void* somador_thread(void* threadNum);
 void defineNumeros(int N);
 
 void realizaSomatorio(int N);
+
+void stick_this_thread_to_core(int core_id, pthread_attr_t* attr_addr);
 
 // Lock para impedir acesso simultâneo ao somatório global
 Lock *lock;
@@ -22,6 +27,8 @@ int8_t *numeros;
 int tamanho;
 int resto;
 
+
+cpu_set_t cpus;
 
 // Número de threads
 int K;
@@ -115,9 +122,16 @@ void realizaSomatorio(int N){
 
     // Cria threads
     pthread_t threads[K];
+
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+
     long i;
     for(i=0;i<K;i++){
-        pthread_create(&threads[i], NULL, somador_thread, (void*) i);
+        CPU_ZERO(&cpus);
+        CPU_SET(i%6, &cpus);
+        pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+        pthread_create(&threads[i], &attr, somador_thread, (void*) i);
     }
     
     // Espera pelo fim das threads
