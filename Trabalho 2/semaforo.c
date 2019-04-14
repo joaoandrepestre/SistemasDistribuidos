@@ -10,14 +10,14 @@
 
 void* produtor();
 void* consumidor();
-long int consumir_numero_buffer();
+int consumir_numero_buffer();
 void produzir_numero_buffer();
 unsigned int procurar_espaco_livre();
 unsigned int procurar_espaco_cheio();
 void execucao_threads();
 int checar_numero_primo();
 
-long int* numeros;
+int* numeros;
 
 sem_t mutex;
 sem_t vazio;
@@ -34,7 +34,7 @@ int main (int argc, char** argv){
     int num_threads_produtor = atoi(argv[1]);
     int num_threads_consumidor =  atoi(argv[2]);
 
-    numeros = (long*) calloc(BUFFER_SIZE*sizeof(long), 0);
+    numeros = (int*) calloc(BUFFER_SIZE, sizeof(int));
 
     sem_init(&mutex, 0, 1);
     sem_init(&vazio, 0, BUFFER_SIZE);
@@ -48,11 +48,11 @@ int main (int argc, char** argv){
 }
 
 void* produtor(){
-    long int numero_gerado;
+    int numero_gerado;
     
     while(1) {
 
-        numero_gerado = rand();
+        numero_gerado = rand()%100000;
 
         sem_wait(&vazio);
         sem_wait(&mutex);
@@ -65,7 +65,7 @@ void* produtor(){
 }
 
 void* consumidor(){
-    long int numero_para_checar;
+    int numero_para_checar;
 
     while(1) {
         sem_wait(&cheio);
@@ -79,24 +79,26 @@ void* consumidor(){
         int bool_primo = checar_numero_primo(numero_para_checar);
 
         if(bool_primo){
-            printf("O número %d é primo\n", numero_para_checar);
+            printf("O número %ld é primo\n", numero_para_checar);
         } else {
-            printf("O número %d não é primo\n", numero_para_checar);
+            printf("O número %ld não é primo\n", numero_para_checar);
         }
     }
 }
 
-void produzir_numero_buffer(long int numero_gerado){
+void produzir_numero_buffer(int numero_gerado){
     int espaco_livre = procurar_espaco_livre();
+
+    printf(" inserindo numero %d\n", numero_gerado);
 
     numeros[espaco_livre] = numero_gerado;
 }
 
 
-long int consumir_numero_buffer(){
+int consumir_numero_buffer(){
     int espaco_cheio = procurar_espaco_cheio();
 
-    long int temp = numeros[espaco_cheio];
+    int temp = numeros[espaco_cheio];
 
     numeros[espaco_cheio] = 0;
 
@@ -107,23 +109,20 @@ unsigned int procurar_espaco_livre(){
     unsigned int i;
     for(i = 0; i < BUFFER_SIZE; i++){
         if(numeros[i] == 0){
-            printf("espaço vazio %d\n", i);
+            printf("espaço vazio %d", i);
             return i;
         }
     }
-    printf("coe\n");
-
 }
 
 unsigned int procurar_espaco_cheio(){
     unsigned int i;
     for(i = 0; i < BUFFER_SIZE; i++){
         if(numeros[i] != 0){
-            printf("espaço cheio %d\n", i);
+            printf("espaço cheio %d, numero %d\n", i, numeros[i]);
             return i;
         }
     }
-    printf("coeeeeeez\n");
 }
 
 int checar_numero_primo(unsigned int numero){
