@@ -49,12 +49,19 @@ int main(int argc, char **argv){
     // Inicia números que serão somados
     defineNumeros(1000000000);
 
+    // Inicia medidor de tempo
+    clock_t start, end;
+    double tempo_cpu;
+
     int N;
     for(N=10000000;N<=1000000000;N*=10){
         printf("Somatórios de %d valores.\n", N);
         for(K=1;K<=256;K*=2){
+            start = clock();
             realizaSomatorio(N);
-            printf("\tSomatório usando %d threads: %lld.\n",K, somatorio);
+            end = clock();
+            tempo_cpu = ((double) (end-start)) / CLOCKS_PER_SEC;
+            printf("\tSomatório usando %d threads: %lld. Levou %2f segundos.\n",K, somatorio, tempo_cpu);
         }
         printf("\n");
     }
