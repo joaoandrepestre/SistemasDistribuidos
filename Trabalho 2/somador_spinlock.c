@@ -37,7 +37,7 @@ int main(int argc, char **argv){
 
     // Inicializa gerador de números aleatórios
     time_t seed;
-    srand((unsigned long) &seed);
+    srand((unsigned) time(&seed));
 
     // Checa parâmetros
     if(argc < 2){
