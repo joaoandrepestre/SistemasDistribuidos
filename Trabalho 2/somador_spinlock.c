@@ -8,11 +8,17 @@
 #include <sched.h>
 #include "./lock/lock.h"
 
+#define BUFFER_MIN_SIZE 10000000
+#define BUFFER_MAX_SIZE 1000000000
+#define MIN_NUM_THREADS 1
+#define MAX_NUM_THREADS 256
+
+
 void* somador_thread(void* threadNum);
 
-void defineNumeros(int N);
+void defineNumeros(int buffer_size);
 
-void realizaSomatorio(int N);
+void realizaSomatorio(int buffer_size);
 
 void stick_this_thread_to_core(int core_id, pthread_attr_t* attr_addr);
 
@@ -31,7 +37,7 @@ int resto;
 cpu_set_t cpus;
 
 // Número de threads
-int K;
+int num_threads;
 
 int main(int argc, char **argv){
 
@@ -46,7 +52,7 @@ int main(int argc, char **argv){
     }
 
     // Recupera parâmetros
-    K = atoi(argv[1]);
+    num_threads = atoi(argv[1]);
 
     // Inicia variáveis globais
 
@@ -54,24 +60,24 @@ int main(int argc, char **argv){
     lock = criaLock();
     
     // Inicia números que serão somados
-    defineNumeros(1000000000);
+    defineNumeros(BUFFER_MAX_SIZE);
 
     // Inicia medidor de tempo
     clock_t start, end;
     double tempo_cpu;
 
-    int N;
-    for(N=10000000;N<=1000000000;N*=10){
-        printf("Somatórios de %d valores.\n", N);
-        for(K=1;K<=256;K*=2){
+    int buffer_size;
+    for(buffer_size=BUFFER_MIN_SIZE;buffer_size<=BUFFER_MAX_SIZE;buffer_size*=10){
+        printf("Somatórios de %d valores.\n", buffer_size);
+        for(num_threads=MIN_NUM_THREADS;num_threads<=MAX_NUM_THREADS;num_threads*=2){
             start = clock();
             int i;
             for(i=0;i<10;i++){
-                realizaSomatorio(N);
+                realizaSomatorio(buffer_size);
             }
             end = clock();
             tempo_cpu = ((double) (end-start)) / (CLOCKS_PER_SEC*10);
-            printf("\tSomatório usando %d threads: %lld. Levou %2f segundos.\n",K, somatorio, tempo_cpu);
+            printf("\tSomatório usando %d threads: %lld. Levou %2f segundos.\n",num_threads, somatorio, tempo_cpu);
         }
         printf("\n");
     }
@@ -86,9 +92,9 @@ void *somador_thread(void* threadNum){
     int inic = t_num*tamanho;
     int tam = tamanho;
 
-    if(t_num >= K - resto){
+    if(t_num >= num_threads - resto){
         tam++;
-        inic += resto - (K-t_num);
+        inic += resto - (num_threads-t_num);
     }
 
     // Realiza a soma parcial
@@ -104,34 +110,34 @@ void *somador_thread(void* threadNum){
     release(lock);
 }
 
-void defineNumeros(int N){
+void defineNumeros(int buffer_size){
 
     // Inicia array de números a serem somados
-    numeros = (int8_t*) malloc(N*sizeof(int8_t));
+    numeros = (int8_t*) malloc(buffer_size*sizeof(int8_t));
     int i;
-    for(i=0;i<N;i++){
+    for(i=0;i<buffer_size;i++){
         numeros[i] = (int8_t) (100 - rand()%201);
     }
 }
 
-void realizaSomatorio(int N){
+void realizaSomatorio(int buffer_size){
     
     // Inicia tamanho do array que cada thread será responsável
-    tamanho = N / K;
-    resto = N % K;
+    tamanho = buffer_size / num_threads;
+    resto = buffer_size % num_threads;
 
     // Inicia somatório em 0
     somatorio = 0;
 
     // Cria threads
-    pthread_t threads[K];
+    pthread_t threads[num_threads];
 
     // Inicia atributos de thread
     pthread_attr_t attr;
     pthread_attr_init(&attr);
 
     long i;
-    for(i=0;i<K;i++){
+    for(i=0;i<num_threads;i++){
 
         // Aloca cada thread em uma CPU diferente
         CPU_ZERO(&cpus);
@@ -143,7 +149,7 @@ void realizaSomatorio(int N){
     }
     
     // Espera pelo fim das threads
-    for(i=0;i<K;i++){
+    for(i=0;i<num_threads;i++){
         pthread_join(threads[i], NULL);
     }
 }
