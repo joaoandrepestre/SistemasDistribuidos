@@ -213,23 +213,25 @@ void execucao_threads(int num_threads_produtor, int num_threads_consumidor){
     
     pthread_t threads_produtor[num_threads_produtor];
     pthread_t threads_consumidor[num_threads_consumidor];
-    
+
+    // Cria threads produtoras
     int i;
     for(i = 0; i < num_threads_produtor; i++){
         pthread_create(&threads_produtor[i], NULL, produtor, NULL);
     }
 
+    // Cria threads consumidoras
     for(i = 0; i < num_threads_consumidor; i++){
         pthread_create(&threads_consumidor[i], NULL, consumidor, NULL);
     }
 
+    // Espera pelo fim dos produtores
     for(i = 0; i < num_threads_produtor; i++){
         pthread_join(threads_produtor[i], NULL);
     }
 
+    // Espera pelo fim dos consumidores
     for(i = 0; i < num_threads_consumidor; i++){
         pthread_join(threads_consumidor[i], NULL);        
     }
-
-    printf("Produzidos: %d, Consumidos: %d\n", numeros_produzidos, numeros_consumidos);
 }
