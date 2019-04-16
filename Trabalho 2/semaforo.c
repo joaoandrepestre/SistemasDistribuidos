@@ -19,6 +19,9 @@ int checar_numero_primo();
 
 int* numeros;
 
+int numeros_produzidos;
+int numeros_consumidos;
+
 sem_t mutex;
 sem_t vazio;
 sem_t cheio;
@@ -50,7 +53,7 @@ int main (int argc, char** argv){
 void* produtor(){
     int numero_gerado;
     
-    while(1) {
+    while(numeros_produzidos<MAX_MEMORIA_CONSUMIDA) {
 
         numero_gerado = rand()%100000;
 
@@ -67,7 +70,7 @@ void* produtor(){
 void* consumidor(){
     int numero_para_checar;
 
-    while(1) {
+    while(numeros_consumidos<MAX_MEMORIA_CONSUMIDA) {
         sem_wait(&cheio);
         sem_wait(&mutex);
            
@@ -87,20 +90,34 @@ void* consumidor(){
 }
 
 void produzir_numero_buffer(int numero_gerado){
+
+    if(numeros_produzidos>=MAX_MEMORIA_CONSUMIDA){
+        pthread_exit(NULL);
+    }
+
     int espaco_livre = procurar_espaco_livre();
 
     printf(" inserindo numero %d\n", numero_gerado);
 
     numeros[espaco_livre] = numero_gerado;
+
+    numeros_produzidos++;
 }
 
 
 int consumir_numero_buffer(){
+
+    if(numeros_consumidos>=MAX_MEMORIA_CONSUMIDA){
+        pthread_exit(NULL);
+    }
+
     int espaco_cheio = procurar_espaco_cheio();
 
     int temp = numeros[espaco_cheio];
 
     numeros[espaco_cheio] = 0;
+
+    numeros_consumidos++;
 
     return temp;
 }
@@ -109,7 +126,6 @@ unsigned int procurar_espaco_livre(){
     unsigned int i;
     for(i = 0; i < BUFFER_SIZE; i++){
         if(numeros[i] == 0){
-            printf("espaço vazio %d", i);
             return i;
         }
     }
@@ -119,7 +135,6 @@ unsigned int procurar_espaco_cheio(){
     unsigned int i;
     for(i = 0; i < BUFFER_SIZE; i++){
         if(numeros[i] != 0){
-            printf("espaço cheio %d, numero %d\n", i, numeros[i]);
             return i;
         }
     }
@@ -154,4 +169,6 @@ void execucao_threads(int num_threads_produtor, int num_threads_consumidor){
     for(i = 0; i < num_threads_consumidor; i++){
         pthread_join(threads_consumidor[i], NULL);        
     }
+
+    printf("Produzidos: %d, Consumidos: %d\n", numeros_produzidos, numeros_consumidos);
 }
