@@ -79,45 +79,49 @@ void* consumidor(){
         sem_post(&mutex);
         sem_post(&vazio);
 
-        int bool_primo = checar_numero_primo(numero_para_checar);
+        if(numero_para_checar != -1){
 
-        if(bool_primo){
-            printf("O número %ld é primo\n", numero_para_checar);
-        } else {
-            printf("O número %ld não é primo\n", numero_para_checar);
+            int bool_primo = checar_numero_primo(numero_para_checar);
+
+            if(bool_primo){
+                printf("O número %ld é primo\n", numero_para_checar);
+            } else {
+                printf("O número %ld não é primo\n", numero_para_checar);
+            }
         }
     }
 }
 
 void produzir_numero_buffer(int numero_gerado){
 
-    if(numeros_produzidos>=MAX_MEMORIA_CONSUMIDA){
-        pthread_exit(NULL);
+    if(numeros_produzidos < MAX_MEMORIA_CONSUMIDA){   
+
+        int espaco_livre = procurar_espaco_livre();
+
+        printf(" inserindo numero %d\n", numero_gerado);
+
+        numeros[espaco_livre] = numero_gerado;
+
+        numeros_produzidos++;
     }
-
-    int espaco_livre = procurar_espaco_livre();
-
-    printf(" inserindo numero %d\n", numero_gerado);
-
-    numeros[espaco_livre] = numero_gerado;
-
-    numeros_produzidos++;
 }
 
 
 int consumir_numero_buffer(){
 
-    if(numeros_consumidos>=MAX_MEMORIA_CONSUMIDA){
-        pthread_exit(NULL);
+    int temp = -1;
+
+    if(numeros_consumidos < MAX_MEMORIA_CONSUMIDA){
+
+        int espaco_cheio = procurar_espaco_cheio();
+
+        temp = numeros[espaco_cheio];
+
+        numeros[espaco_cheio] = 0;
+
+        numeros_consumidos++;
+    
     }
-
-    int espaco_cheio = procurar_espaco_cheio();
-
-    int temp = numeros[espaco_cheio];
-
-    numeros[espaco_cheio] = 0;
-
-    numeros_consumidos++;
 
     return temp;
 }
@@ -142,6 +146,9 @@ unsigned int procurar_espaco_cheio(){
 
 int checar_numero_primo(unsigned int numero){
     unsigned int i;
+
+    if(numero == 0) return 0;
+
     for(i=2;i<numero;i++){
         if(numero%i == 0) return 0;
     }
