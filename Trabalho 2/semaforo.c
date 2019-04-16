@@ -6,7 +6,7 @@
 #include <time.h>
 
 // Define tamanho da memória compartilhada
-#define BUFFER_SIZE 10
+//#define BUFFER_SIZE 32
 
 // Define máximo de números a serem trocados entre produtores e consumirdores
 #define MAX_MEMORIA_CONSUMIDA 100000
@@ -34,6 +34,9 @@ sem_t mutex;
 sem_t vazio;
 sem_t cheio;
 
+// Define tamanho do buffer;
+int BUFFER_SIZE;
+
 int main (int argc, char** argv){
 
     // Inicia gerador de números aleatórios
@@ -50,23 +53,45 @@ int main (int argc, char** argv){
     int num_threads_consumidor =  atoi(argv[2]);
 
     // Aloca o buffer de memória compartilhada iniciando ele vazio
-    buffer_compartilhado = (int*) calloc(BUFFER_SIZE, sizeof(int));
+    //buffer_compartilhado = (int*) calloc(BUFFER_SIZE, sizeof(int));
 
-    // Inicia os semáforos:
-    // Semáforo mutex para acesso ao buffer
-    sem_init(&mutex, 0, 1);
-    // Semáforo contador de espaços desocupados
-    sem_init(&vazio, 0, BUFFER_SIZE);
-    // Semáforo contador de espaços ocupados
-    sem_init(&cheio, 0, 0);
+    // Estudos de caso
+    clock_t start, end;
+    double tempo_cpu;
+
+    FILE *output = fopen("semaforo_tempo.txt", "w");
+
+    for(BUFFER_SIZE=1;BUFFER_SIZE<=32;BUFFER_SIZE*=2){
+
+        fprintf(output, "Memória compartilhada de tamanho: %d\n", BUFFER_SIZE);
+        int cons;
+        for(cons=1;cons<=16;cons*=2){
+            int i;
+            start = clock();
+            for(i=0;i<10;i++){
+                execucao_threads(1, cons);
+            }
+            end = clock();
+            tempo_cpu = ((double) (end-start)) / (CLOCKS_PER_SEC*10);
+            fprintf(output, "\tTempo para 1 produtor e %d consumidores: %2f\n", cons, tempo_cpu);
+        }
+
+        int prod;
+        for(prod=2;prod<=16;prod*=2){
+            int i;
+            start = clock();
+            for(i=0;i<10;i++){
+                execucao_threads(prod, 1);
+            }
+            end = clock();
+            tempo_cpu = ((double) (end-start)) / (CLOCKS_PER_SEC*10);
+            fprintf(output, "\tTempo para %d produtores e 1 consumidor: %2f\n", prod, tempo_cpu);
+
+        }
+    }
 
     // Executa as threads
-    execucao_threads(num_threads_produtor, num_threads_consumidor);
-
-    // Destrói os semáforos
-    sem_destroy(&mutex);
-    sem_destroy(&vazio);
-    sem_destroy(&cheio);
+    //execucao_threads(num_threads_produtor, num_threads_consumidor);
 }
 
 // Função produtora de números
@@ -210,9 +235,23 @@ int checar_numero_primo(unsigned int numero){
 
 // Inicia as threads e espera pelo fim da execução
 void execucao_threads(int num_threads_produtor, int num_threads_consumidor){
+
+    buffer_compartilhado = (int*) calloc(BUFFER_SIZE, sizeof(int));
+
+    // Inicia os semáforos:
+    // Semáforo mutex para acesso ao buffer
+    sem_init(&mutex, 0, 1);
+    // Semáforo contador de espaços desocupados
+    sem_init(&vazio, 0, BUFFER_SIZE);
+    // Semáforo contador de espaços ocupados
+    sem_init(&cheio, 0, 0);
     
     pthread_t threads_produtor[num_threads_produtor];
     pthread_t threads_consumidor[num_threads_consumidor];
+
+    // Inicializa contadores
+    numeros_produzidos = 0;
+    numeros_consumidos = 0;
 
     // Cria threads produtoras
     int i;
@@ -234,4 +273,12 @@ void execucao_threads(int num_threads_produtor, int num_threads_consumidor){
     for(i = 0; i < num_threads_consumidor; i++){
         pthread_join(threads_consumidor[i], NULL);        
     }
+
+    // Destrói os semáforos
+    sem_destroy(&mutex);
+    sem_destroy(&vazio);
+    sem_destroy(&cheio);
+
+    free(buffer_compartilhado);
+
 }
