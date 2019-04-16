@@ -23,9 +23,6 @@ int checar_numero_primo();
 // Buffer de memória compartilhada
 int* buffer_compartilhado;
 
-// Quantidade de números produzidos
-int numeros_produzidos;
-
 // Quantidade de números consumidos
 int numeros_consumidos;
 
@@ -36,6 +33,7 @@ sem_t cheio;
 
 // Define tamanho do buffer;
 int BUFFER_SIZE;
+
 
 int main (int argc, char** argv){
 
@@ -51,9 +49,6 @@ int main (int argc, char** argv){
     // Recupera os parâmetros passados
     int num_threads_produtor = atoi(argv[1]);
     int num_threads_consumidor =  atoi(argv[2]);
-
-    // Aloca o buffer de memória compartilhada iniciando ele vazio
-    //buffer_compartilhado = (int*) calloc(BUFFER_SIZE, sizeof(int));
 
     // Estudos de caso
     clock_t start, end;
@@ -86,19 +81,16 @@ int main (int argc, char** argv){
             end = clock();
             tempo_cpu = ((double) (end-start)) / (CLOCKS_PER_SEC*10);
             fprintf(output, "\tTempo para %d produtores e 1 consumidor: %2f\n", prod, tempo_cpu);
-
         }
     }
-
-    // Executa as threads
-    //execucao_threads(num_threads_produtor, num_threads_consumidor);
 }
 
 // Função produtora de números
 void* produtor(){
+    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
     int numero_gerado;
 
-    while(numeros_produzidos<MAX_MEMORIA_CONSUMIDA) {
+    while(1) {
 
         // Gera número aleatório
         numero_gerado = rand()%100000;
@@ -120,9 +112,10 @@ void* produtor(){
 
 // Função consumidora de números
 void* consumidor(){
+    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
     int numero_para_checar;
 
-    while(numeros_consumidos<MAX_MEMORIA_CONSUMIDA) {
+    while(1) {
 
         // Espera existir um espaço ocupado no buffer
         sem_wait(&cheio);
@@ -156,21 +149,14 @@ void* consumidor(){
 // Escreve o numero gerado no buffer
 void produzir_numero_buffer(int numero_gerado){
 
-    // Se o limite de números produzidos não tiver sido atingido
-    if(numeros_produzidos < MAX_MEMORIA_CONSUMIDA){   
+    // Procura um espaço livre no buffer
+    int espaco_livre = procurar_espaco_livre();
 
-        // Procura um espaço livre no buffer
-        int espaco_livre = procurar_espaco_livre();
+    // Informa o número inserido
+    printf("Inserindo numero %d\n", numero_gerado);
 
-        // Informa o número inserido
-        printf(" inserindo numero %d\n", numero_gerado);
-
-        // Escreve o número no buffer
-        buffer_compartilhado[espaco_livre] = numero_gerado;
-
-        // Incrementa o contador de números já produzidos
-        numeros_produzidos++;
-    }
+    // Escreve o número no buffer
+    buffer_compartilhado[espaco_livre] = numero_gerado;
 }
 
 // Lê um número do buffer
@@ -250,7 +236,6 @@ void execucao_threads(int num_threads_produtor, int num_threads_consumidor){
     pthread_t threads_consumidor[num_threads_consumidor];
 
     // Inicializa contadores
-    numeros_produzidos = 0;
     numeros_consumidos = 0;
 
     // Cria threads produtoras
@@ -264,13 +249,17 @@ void execucao_threads(int num_threads_produtor, int num_threads_consumidor){
         pthread_create(&threads_consumidor[i], NULL, consumidor, NULL);
     }
 
-    // Espera pelo fim dos produtores
+    while(numeros_consumidos < MAX_MEMORIA_CONSUMIDA);
+
+    printf("Consumidos: %d\n", numeros_consumidos);
+
     for(i = 0; i < num_threads_produtor; i++){
+        pthread_cancel(threads_produtor[i]);
         pthread_join(threads_produtor[i], NULL);
     }
 
-    // Espera pelo fim dos consumidores
     for(i = 0; i < num_threads_consumidor; i++){
+        pthread_cancel(threads_consumidor[i]);
         pthread_join(threads_consumidor[i], NULL);        
     }
 
