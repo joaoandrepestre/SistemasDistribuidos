@@ -153,7 +153,7 @@ void produzir_numero_buffer(int numero_gerado){
     int espaco_livre = procurar_espaco_livre();
 
     // Informa o número inserido
-    printf("Inserindo numero %d\n", numero_gerado);
+    //printf("Inserindo numero %d\n", numero_gerado);
 
     // Escreve o número no buffer
     buffer_compartilhado[espaco_livre] = numero_gerado;
@@ -251,8 +251,7 @@ void execucao_threads(int num_threads_produtor, int num_threads_consumidor){
 
     while(numeros_consumidos < MAX_MEMORIA_CONSUMIDA);
 
-    printf("Consumidos: %d\n", numeros_consumidos);
-
+    
     for(i = 0; i < num_threads_produtor; i++){
         pthread_cancel(threads_produtor[i]);
         pthread_join(threads_produtor[i], NULL);
