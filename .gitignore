@@ -1,5 +1,7 @@
 *.out
 *.txt
 *.aproj*
+*.pdf
+*.odp
 .vscode/
 
