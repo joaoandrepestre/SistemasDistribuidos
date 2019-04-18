@@ -62,25 +62,9 @@ int main(int argc, char **argv){
     // Inicia números que serão somados
     defineNumeros(BUFFER_MAX_SIZE);
 
-    // Inicia medidor de tempo
-    clock_t start, end;
-    double tempo_cpu;
-
-    int buffer_size;
-    for(buffer_size=BUFFER_MIN_SIZE;buffer_size<=BUFFER_MAX_SIZE;buffer_size*=10){
-        printf("Somatórios de %d valores.\n", buffer_size);
-        for(num_threads=MIN_NUM_THREADS;num_threads<=MAX_NUM_THREADS;num_threads*=2){
-            start = clock();
-            int i;
-            for(i=0;i<10;i++){
-                realizaSomatorio(buffer_size);
-            }
-            end = clock();
-            tempo_cpu = ((double) (end-start)) / (CLOCKS_PER_SEC*10);
-            printf("\tSomatório usando %d threads: %lld. Levou %2f segundos.\n",num_threads, somatorio, tempo_cpu);
-        }
-        printf("\n");
-    }
+    realizaSomatorio(BUFFER_MAX_SIZE);
+           
+    printf("Somatório de %d números usando %d threads: %lld\n",BUFFER_MAX_SIZE, num_threads, somatorio);
 
     return 0;
 }
