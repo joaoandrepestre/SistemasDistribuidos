@@ -1,19 +1,21 @@
+#define _GNU_SOURCE
+#include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <time.h>
 #include <semaphore.h>
 #include <pthread.h>
-#include <stdlib.h>
-#include <time.h>
+#include <unistd.h>
 
 // Define tamanho da memória compartilhada
-//#define BUFFER_SIZE 32
+#define MAX_BUFFER_SIZE 32
 
 // Define máximo de números a serem trocados entre produtores e consumirdores
 #define MAX_MEMORIA_CONSUMIDA 10000
 
 // Definindo tamanho do vetor
 // Se for definido com o #define causa Seg Fault em algumas execuções
-int BUFFER_SIZE = 32;
+int BUFFER_SIZE;
 
 void* produtor();
 void* consumidor();
@@ -56,7 +58,49 @@ int main (int argc, char** argv){
         exit(1);
     }
 
-    execucao_threads(num_threads_produtor, num_threads_consumidor);
+    // Estudos de caso
+    struct timespec start, end;
+    double tempo_cpu;
+
+    buffer_compartilhado = (int*) malloc(MAX_BUFFER_SIZE*sizeof(int));
+
+    FILE *output = fopen("semaforo_tempo.txt", "w");
+
+    for(BUFFER_SIZE=1;BUFFER_SIZE<=32;BUFFER_SIZE*=2){
+
+        fprintf(output, "Memória compartilhada de tamanho: %d\n", BUFFER_SIZE);
+        int cons;
+        for(cons=1;cons<=16;cons*=2){
+            int i;
+            clock_gettime(CLOCK_MONOTONIC, &start);
+            for(i=0;i<10;i++){
+                execucao_threads(1, cons);
+            }
+            clock_gettime(CLOCK_MONOTONIC, &end);
+            tempo_cpu = (end.tv_sec-start.tv_sec);
+            tempo_cpu += (end.tv_nsec - start.tv_nsec)/(1000000000.0);
+            tempo_cpu /=10;
+            fprintf(output, "\tTempo para 1 produtor e %d consumidores: %2f\n", cons, tempo_cpu);
+        }
+
+        int prod;
+        for(prod=2;prod<=16;prod*=2){
+            int i;
+            clock_gettime(CLOCK_MONOTONIC, &start);
+            for(i=0;i<10;i++){
+                execucao_threads(prod, 1);
+            }
+            clock_gettime(CLOCK_MONOTONIC, &end);
+            tempo_cpu = (end.tv_sec-start.tv_sec);
+            tempo_cpu += (end.tv_nsec - start.tv_nsec)/(1000000000.0);
+            tempo_cpu /=10;
+            fprintf(output, "\tTempo para %d produtores e 1 consumidor: %2f\n", prod, tempo_cpu);
+        }
+    }
+
+    free(buffer_compartilhado);
+
+    //execucao_threads(num_threads_produtor, num_threads_consumidor);
 }
 
 // Função produtora de números
@@ -181,7 +225,10 @@ int checar_numero_primo(unsigned int numero){
 // Inicia as threads e espera pelo fim da execução
 void execucao_threads(int num_threads_produtor, int num_threads_consumidor){
 
-    buffer_compartilhado = (int*) calloc(BUFFER_SIZE, sizeof(int));
+    int i;
+    for(i=0;i<BUFFER_SIZE;i++){
+        buffer_compartilhado[i] = 0;
+    }
 
     // Inicia os semáforos:
     // Semáforo mutex para acesso ao buffer
@@ -198,7 +245,6 @@ void execucao_threads(int num_threads_produtor, int num_threads_consumidor){
     numeros_consumidos = 0;
 
     // Cria threads produtoras
-    int i;
     for(i = 0; i < num_threads_produtor; i++){
         pthread_create(&threads_produtor[i], NULL, produtor, NULL);
     }
@@ -224,9 +270,6 @@ void execucao_threads(int num_threads_produtor, int num_threads_consumidor){
     sem_destroy(&mutex);
     sem_destroy(&vazio);
     sem_destroy(&cheio);
-
-    free(buffer_compartilhado);
-
 }
 
 void processar_resposta(int numero_para_checar) {

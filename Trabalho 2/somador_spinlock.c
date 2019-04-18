@@ -62,9 +62,31 @@ int main(int argc, char **argv){
     // Inicia números que serão somados
     defineNumeros(BUFFER_MAX_SIZE);
 
-    realizaSomatorio(BUFFER_MAX_SIZE);
+    /* realizaSomatorio(BUFFER_MAX_SIZE);
            
-    printf("Somatório de %d números usando %d threads: %lld\n",BUFFER_MAX_SIZE, num_threads, somatorio);
+    printf("Somatório de %d números usando %d threads: %lld\n",BUFFER_MAX_SIZE, num_threads, somatorio); */
+
+    // Inicia medidor de tempo
+    struct timespec start, end;
+    double tempo_cpu;
+
+    int N;
+    for(N=BUFFER_MIN_SIZE;N<=BUFFER_MAX_SIZE;N*=10){
+        printf("Somatórios de %d valores.\n", N);
+        for(num_threads=MIN_NUM_THREADS;num_threads<=MAX_NUM_THREADS;num_threads*=2){
+            clock_gettime(CLOCK_MONOTONIC, &start);
+            int i;
+            for(i=0;i<10;i++){
+                realizaSomatorio(N);
+            }
+            clock_gettime(CLOCK_MONOTONIC, &end);
+            tempo_cpu = (end.tv_sec-start.tv_sec);
+            tempo_cpu += (end.tv_nsec - start.tv_nsec)/(1000000000.0);
+            tempo_cpu /=10;
+            printf("\tSomatório usando %d threads: %lld. Levou %2f segundos.\n",num_threads, somatorio, tempo_cpu);
+        }
+        printf("\n");
+    }
 
     return 0;
 }
