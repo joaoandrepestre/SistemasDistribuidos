@@ -9,7 +9,11 @@
 //#define BUFFER_SIZE 32
 
 // Define máximo de números a serem trocados entre produtores e consumirdores
-#define MAX_MEMORIA_CONSUMIDA 100000
+#define MAX_MEMORIA_CONSUMIDA 10000
+
+// Definindo tamanho do vetor
+// Se for definido com o #define causa Seg Fault em algumas execuções
+int BUFFER_SIZE = 32;
 
 void* produtor();
 void* consumidor();
@@ -19,6 +23,7 @@ unsigned int procurar_espaco_livre();
 unsigned int procurar_espaco_cheio();
 void execucao_threads();
 int checar_numero_primo();
+void processar_resposta();
 
 // Buffer de memória compartilhada
 int* buffer_compartilhado;
@@ -30,10 +35,6 @@ int numeros_consumidos;
 sem_t mutex;
 sem_t vazio;
 sem_t cheio;
-
-// Define tamanho do buffer;
-int BUFFER_SIZE;
-
 
 int main (int argc, char** argv){
 
@@ -50,39 +51,22 @@ int main (int argc, char** argv){
     int num_threads_produtor = atoi(argv[1]);
     int num_threads_consumidor =  atoi(argv[2]);
 
+    if (num_threads_produtor == 0 || num_threads_consumidor == 0){
+        fprintf(stderr, "Por favor defina um número de threads diferente de zero.\n");
+        exit(1);
+    }
+
     // Estudos de caso
     clock_t start, end;
     double tempo_cpu;
 
     FILE *output = fopen("semaforo_tempo.txt", "w");
 
-    for(BUFFER_SIZE=1;BUFFER_SIZE<=32;BUFFER_SIZE*=2){
-
-        fprintf(output, "Memória compartilhada de tamanho: %d\n", BUFFER_SIZE);
-        int cons;
-        for(cons=1;cons<=16;cons*=2){
-            int i;
-            start = clock();
-            for(i=0;i<10;i++){
-                execucao_threads(1, cons);
-            }
-            end = clock();
-            tempo_cpu = ((double) (end-start)) / (CLOCKS_PER_SEC*10);
-            fprintf(output, "\tTempo para 1 produtor e %d consumidores: %2f\n", cons, tempo_cpu);
-        }
-
-        int prod;
-        for(prod=2;prod<=16;prod*=2){
-            int i;
-            start = clock();
-            for(i=0;i<10;i++){
-                execucao_threads(prod, 1);
-            }
-            end = clock();
-            tempo_cpu = ((double) (end-start)) / (CLOCKS_PER_SEC*10);
-            fprintf(output, "\tTempo para %d produtores e 1 consumidor: %2f\n", prod, tempo_cpu);
-        }
-    }
+    start = clock();
+    execucao_threads(num_threads_produtor, num_threads_consumidor);
+    end = clock();
+    tempo_cpu = ((double) (end-start)) / (CLOCKS_PER_SEC*10);
+    fprintf(output, "\tTempo para %d produtores e %d consumidores: %2f\n", num_threads_produtor, num_threads_consumidor, tempo_cpu);
 }
 
 // Função produtora de números
@@ -130,19 +114,7 @@ void* consumidor(){
         // Sinaliza que um espaço do buffer foi desocupado
         sem_post(&vazio);
 
-        // Se o numero recebido não foi um código de erro
-        if(numero_para_checar != -1){
-
-            // Checa se o número é primo
-            int bool_primo = checar_numero_primo(numero_para_checar);
-
-            // Informa o usuário
-            if(bool_primo){
-                printf("O número %ld é primo\n", numero_para_checar);
-            } else {
-                printf("O número %ld não é primo\n", numero_para_checar);
-            }
-        }
+        processar_resposta(numero_para_checar);
     }
 }
 
@@ -151,9 +123,6 @@ void produzir_numero_buffer(int numero_gerado){
 
     // Procura um espaço livre no buffer
     int espaco_livre = procurar_espaco_livre();
-
-    // Informa o número inserido
-    //printf("Inserindo numero %d\n", numero_gerado);
 
     // Escreve o número no buffer
     buffer_compartilhado[espaco_livre] = numero_gerado;
@@ -179,7 +148,7 @@ int consumir_numero_buffer(){
 
         // Incrementa o contador de números já consumidos
         numeros_consumidos++;
-    
+
     } // Se o limite for atingido, retorna código de erro
 
     return temp;
@@ -212,7 +181,7 @@ int checar_numero_primo(unsigned int numero){
 
     if(numero == 0) return 0;
 
-    for(i=2;i<numero;i++){
+    for(i=2;i<numero/2;i++){
         if(numero%i == 0) return 0;
     }
 
@@ -251,7 +220,6 @@ void execucao_threads(int num_threads_produtor, int num_threads_consumidor){
 
     while(numeros_consumidos < MAX_MEMORIA_CONSUMIDA);
 
-    
     for(i = 0; i < num_threads_produtor; i++){
         pthread_cancel(threads_produtor[i]);
         pthread_join(threads_produtor[i], NULL);
@@ -269,4 +237,20 @@ void execucao_threads(int num_threads_produtor, int num_threads_consumidor){
 
     free(buffer_compartilhado);
 
+}
+
+void processar_resposta(int numero_para_checar) {
+    // Se o numero recebido não foi um código de erro
+    if(numero_para_checar != -1){
+
+        // Checa se o número é primo
+        int bool_primo = checar_numero_primo(numero_para_checar);
+
+        // Informa o usuário
+        if(bool_primo){
+            printf("O número %ld é primo\n", numero_para_checar);
+        } else {
+            printf("O número %ld não é primo\n", numero_para_checar);
+        }
+    }
 }
