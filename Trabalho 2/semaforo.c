@@ -56,17 +56,7 @@ int main (int argc, char** argv){
         exit(1);
     }
 
-    // Estudos de caso
-    clock_t start, end;
-    double tempo_cpu;
-
-    FILE *output = fopen("semaforo_tempo.txt", "w");
-
-    start = clock();
     execucao_threads(num_threads_produtor, num_threads_consumidor);
-    end = clock();
-    tempo_cpu = ((double) (end-start)) / (CLOCKS_PER_SEC*10);
-    fprintf(output, "\tTempo para %d produtores e %d consumidores: %2f\n", num_threads_produtor, num_threads_consumidor, tempo_cpu);
 }
 
 // Função produtora de números
