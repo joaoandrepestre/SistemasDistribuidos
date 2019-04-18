@@ -11,7 +11,7 @@
 #define MAX_BUFFER_SIZE 32
 
 // Define máximo de números a serem trocados entre produtores e consumirdores
-#define MAX_MEMORIA_CONSUMIDA 10000
+#define MAX_MEMORIA_CONSUMIDA 100000
 
 // Definindo tamanho do vetor
 // Se for definido com o #define causa Seg Fault em algumas execuções
