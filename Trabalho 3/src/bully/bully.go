@@ -1,29 +1,29 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net"
 	"net/http"
-	"net/rpc"
-	"time"
+	"os"
+	"strconv"
+	"sync"
 )
 
-type API int
-
-type Message struct {
+/* type Message struct {
 	MessageType int
 	ProcessId   int
 	ElectionId  int
 }
 
-func (api *API) receiveMsg(msg int, reply *int) error {
-	/* var splitMsg []string
+type API int
+
+func (api *API) ReceiveMsg(msg Message, reply *Message) error {
+	var splitMsg []string
 
 	splitMsg = strings.Split(msg, "|")
-	msgType := splitMsg[0] */
+	msgType := splitMsg[0]
 
-	switch msg {
+	switch msg.MessageType {
 	case 1:
 		fmt.Println("Eleição")
 	case 2:
@@ -37,46 +37,57 @@ func (api *API) receiveMsg(msg int, reply *int) error {
 	}
 
 	return nil
-}
+} */
 
-var id int
-var electionId int
-var leaderId int
+var pid int
+var eleicao_id int
+var lider_id int
 
 func main() {
-	api := new(API)
-	rpc.Register(api)
-	rpc.HandleHTTP()
-	l, e := net.Listen("tcp", ":1234")
-	if e != nil {
-		log.Fatal("listen error:", e)
+
+	var numero_processos int
+	var err error
+	var port int
+	var clients []*net.TCPConn
+
+	args := os.Args[1:]
+	if len(args) < 2 {
+		log.Fatal("Número de argumentos inválido. Forneça o número de processos e o ID do processo atual.")
+		os.Exit(1)
+	}
+	numero_processos, err = strconv.Atoi(args[0])
+
+	pid = os.Getpid()
+	eleicao_id, err = strconv.Atoi(args[1])
+	lider_id = numero_processos - 1
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	port = 4000 + eleicao_id
+	addr, err := net.ResolveTCPAddr("tcp4", ":"+strconv.Itoa(port))
+	l, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		log.Fatal("listen error:", err)
 	}
 
 	go http.Serve(l, nil)
 
-	client, err := rpc.DialHTTP("tcp", "localhost:1234")
+	for i := 0; i < numero_processos; i++ {
+		if i != eleicao_id {
+			addr, err = net.ResolveTCPAddr("tcp4", ":"+strconv.Itoa(4000+i))
+			client, err := net.DialTCP("tcp", nil, addr)
+			if err != nil {
+				log.Fatal("dialing:", err)
+			}
+			clients = append(clients, client)
+		}
+	}
+
+	/* client, err := rpc.DialHTTP("tcp", "localhost:1234")
 	if err != nil {
 		log.Fatal("dialing:", err)
-	}
+	} */
 
-	var reply int
-	//msg := Message{MessageType: 1, ProcessId: 3, ElectionId: 19}
-	err = client.Call("API.receiveMsg", 1, &reply)
-	if err != nil {
-		log.Fatal("api error:", err)
-	}
-}
-
-func userInterface() {
-	for {
-		fmt.Printf("Interface com o usuário\n")
-		time.Sleep(time.Second * 1)
-	}
-}
-
-func detectLeader() {
-	for {
-		fmt.Printf("Exporadicamente checa se o líder está ativo\n")
-		time.Sleep(time.Second * 1)
-	}
+	wg.Wait()
 }
