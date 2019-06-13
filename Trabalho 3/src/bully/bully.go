@@ -107,16 +107,17 @@ func main() {
 // CheckLider - função que periodicamente checa se líder está ativo
 func CheckLider() {
 	for {
-		if liderID.Get() != eleicaoID.Get() {
+		if liderID.Get() != eleicaoID.Get() && liderID.Get() != -1 {
 			liderIndex := clientIndex(liderID.Get())
 
 			// Manda mensagem para lider para checar se está vivo
 			fmt.Fprintf(clients[liderIndex], "4|%d|%d\n", pid.Get(), eleicaoID.Get())
-			fmt.Println("Checou lider")
+			// fmt.Println("Checou lider")
 
-			liderTimer = time.AfterFunc(1*time.Second, func() {
-				fmt.Println("Lider não respondeu")
+			liderTimer = time.AfterFunc(5*time.Second, func() {
+				// fmt.Println("Lider não respondeu")
 				// Se lider está morto, manda eleição para todos os processos
+				liderID.Set(-1)
 				enviarEleicao()
 			})
 		}
@@ -129,21 +130,21 @@ func ReceiveMsg() {
 	var mensagem string
 	var err error
 
-	if eleicaoID.Get() != numeroProcessos.Get()-1 {
-		for {
-			for i, server := range servers {
-				fmt.Println("Lendo mensagem de: ", i)
-				mensagem, err = bufio.NewReader(server).ReadString('\n')
-				fmt.Println("Recebeu mensagem ", mensagem)
-				if err != nil {
-					log.Fatal("Read error: ", err)
-				}
-				splitMsg := strings.Split(mensagem, "|")
-				tipo, _ := strconv.Atoi(splitMsg[0])
-				//pid_mensagem, _ := strconv.Atoi(splitMsg[1])
-				eleicaoIDMensagem, _ := strconv.Atoi(splitMsg[2])
-				fmt.Println("Recebeu mensagem de: ", eleicaoIDMensagem)
+	for {
+		for i, server := range servers {
+			fmt.Println("Lendo mensagem de: ", i)
+			mensagem, err = bufio.NewReader(server).ReadString('\n')
+			fmt.Println("Recebeu mensagem ", mensagem)
+			if err != nil {
+				log.Fatal("Read error: ", err)
+			}
+			splitMsg := strings.Split(mensagem[:len(mensagem)-1], "|")
+			tipo, _ := strconv.Atoi(splitMsg[0])
+			//pid_mensagem, _ := strconv.Atoi(splitMsg[1])
+			eleicaoIDMensagem, _ := strconv.Atoi(splitMsg[2])
+			fmt.Println("Recebeu mensagem de: ", eleicaoIDMensagem)
 
+			if eleicaoID.Get() != numeroProcessos.Get()-1 {
 				switch tipo {
 				case 1:
 					fmt.Println("Eleição")
@@ -154,6 +155,7 @@ func ReceiveMsg() {
 				case 3:
 					fmt.Println("Líder")
 					liderID.Set(eleicaoIDMensagem)
+					fmt.Println("Novo líder: ", liderID.Get())
 				case 4:
 					fmt.Println("Vivo")
 					index := clientIndex(eleicaoIDMensagem)
@@ -161,10 +163,16 @@ func ReceiveMsg() {
 				case 5:
 					fmt.Println("Vivo_OK")
 					liderTimer.Stop()
+				case 6:
+					fmt.Println("Morto")
 				}
+			} else {
+				index := clientIndex(eleicaoIDMensagem)
+				fmt.Fprintf(clients[index], "6|%d|%d\n", pid.Get(), eleicaoID.Get())
 			}
 		}
 	}
+
 }
 
 func tratarEleicao(eleicaoIDMensagem int) {
@@ -182,15 +190,16 @@ func enviarEleicao() {
 	for _, client := range clients {
 		fmt.Fprintf(client, "1|%d|%d\n", pid.Get(), eleicaoID.Get())
 	}
-	fmt.Println("Enviei ELEIÇÃO para todos")
+	// fmt.Println("Enviei ELEIÇÃO para todos")
 
-	fmt.Println("Aguardando OK...")
-	okTimer = time.AfterFunc(1*time.Second, func() {
-		fmt.Println("Não recebi OK.")
+	// fmt.Println("Aguardando OK...")
+	okTimer = time.AfterFunc(5*time.Second, func() {
+		// fmt.Println("Não recebi OK.")
+		liderID.Set(eleicaoID.Get())
 		for _, client := range clients {
 			fmt.Fprintf(client, "3|%d|%d\n", pid.Get(), eleicaoID.Get())
 		}
-		fmt.Println("Enviei LIDER para todos")
+		// fmt.Println("Enviei LIDER para todos")
 	})
 }
 
