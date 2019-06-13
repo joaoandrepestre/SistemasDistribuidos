@@ -19,6 +19,9 @@ const msgLIDER int = 3
 const msgVIVO int = 4
 const msgVIVOOK int = 5
 const msgMORTO int = 6
+const msgNAOOK int = 7
+
+const liderMorto int = -1
 
 // ThreadSafeInt - interface para impedir condição de corrida em variáveis globais
 type ThreadSafeInt struct {
@@ -35,14 +38,34 @@ func (t *ThreadSafeInt) Set(v int) {
 	atomic.StoreInt32(&t.value, int32(v))
 }
 
+/* // ThreadSafeTimer - interface para impedir condição de corrida em variáveis globais
+type ThreadSafeTimer struct {
+	timer *time.Timer
+	mutex sync.Mutex
+}
+
+// Set - utiliza mutex para serializar escrita no timer
+func (t *ThreadSafeTimer) Set(timer *time.Timer) {
+	t.mutex.Lock()
+	if t.timer == nil {
+		t.timer = timer
+	} else {
+		t.timer.Reset(5 * time.Second)
+	}
+	t.mutex.Unlock()
+} */
+
 var pid ThreadSafeInt
 var eleicaoID ThreadSafeInt
 var liderID ThreadSafeInt
 var numeroProcessos ThreadSafeInt
 var conexoesLeitura []*net.TCPConn
 var conexoesEscrita []*net.TCPConn
-var okTimer *time.Timer
-var liderTimer *time.Timer
+var okChan chan int
+var liderChan chan int
+
+/* var okTimer *time.Timer
+var liderTimer *time.Timer */
 
 func main() {
 
@@ -114,19 +137,26 @@ func main() {
 // CheckLider - função que periodicamente checa se líder está ativo
 func CheckLider() {
 	for {
-		if eleicaoID.Get() == 0 && liderID.Get() != eleicaoID.Get() && liderID.Get() != -1 {
+		if eleicaoID.Get() == 0 && liderID.Get() != eleicaoID.Get() && liderID.Get() != liderMorto {
 
 			// Manda mensagem para lider para checar se está vivo
 			fmt.Println("Lider atual: ", liderID.Get())
 			enviarMensagemPara(msgVIVO, liderID.Get())
 			fmt.Println("Checou lider")
 
-			liderTimer = time.AfterFunc(5*time.Second, func() {
+			liderVivo := <-liderChan
+			if liderVivo != msgVIVOOK {
+				fmt.Println("Lider não respondeu")
+				// Se lider está morto, manda eleição para todos os processos
+				liderID.Set(liderMorto)
+				broadcastEleicao()
+			}
+			/* liderTimer = time.AfterFunc(5*time.Second, func() {
 				fmt.Println("Lider não respondeu")
 				// Se lider está morto, manda eleição para todos os processos
 				liderID.Set(-1)
 				broadcastEleicao()
-			})
+			}) */
 		}
 		time.Sleep(10 * time.Second)
 	}
@@ -139,42 +169,50 @@ func ReceiveMsg() {
 
 	for {
 		for i, conn := range conexoesLeitura {
-			fmt.Println("Lendo mensagem de: ", i)
-			mensagem, err = bufio.NewReader(conn).ReadString('\n')
-			fmt.Println("Recebeu mensagem ", mensagem)
-			if err != nil {
-				log.Fatal("Read error: ", err)
-			}
-			splitMsg := strings.Split(mensagem[:len(mensagem)-1], "|")
-			tipo, _ := strconv.Atoi(splitMsg[0])
-			//pid_mensagem, _ := strconv.Atoi(splitMsg[1])
-			eleicaoIDMensagem, _ := strconv.Atoi(splitMsg[2])
-			fmt.Println("Recebeu mensagem de: ", eleicaoIDMensagem)
-
-			if eleicaoID.Get() != numeroProcessos.Get()-1 {
-				switch tipo {
-				case msgELEICAO:
-					fmt.Println("Eleição")
-					go tratarEleicao(eleicaoIDMensagem)
-				case msgOK:
-					fmt.Println("OK")
-					okTimer.Stop()
-				case msgLIDER:
-					fmt.Println("Líder")
-					liderID.Set(eleicaoIDMensagem)
-					fmt.Println("Novo líder: ", liderID.Get())
-				case msgVIVO:
-					fmt.Println("Vivo")
-					enviarMensagemPara(msgVIVOOK, eleicaoIDMensagem)
-				case msgVIVOOK:
-					fmt.Println("Vivo_OK")
-					liderTimer.Stop()
-				case msgMORTO:
-					fmt.Println("Morto")
+			go func(i int, conn *net.TCPConn) {
+				fmt.Println("Lendo mensagem de: ", i)
+				mensagem, err = bufio.NewReader(conn).ReadString('\n')
+				fmt.Println("Recebeu mensagem ", mensagem)
+				if err != nil {
+					log.Fatal("Read error: ", err)
 				}
-			} else {
-				enviarMensagemPara(msgMORTO, eleicaoIDMensagem)
-			}
+				splitMsg := strings.Split(mensagem[:len(mensagem)-1], "|")
+				tipo, _ := strconv.Atoi(splitMsg[0])
+				//pid_mensagem, _ := strconv.Atoi(splitMsg[1])
+				eleicaoIDMensagem, _ := strconv.Atoi(splitMsg[2])
+				fmt.Println("Recebeu mensagem de: ", eleicaoIDMensagem)
+
+				if eleicaoID.Get() != numeroProcessos.Get()-1 {
+					switch tipo {
+					case msgELEICAO:
+						fmt.Println("Eleição")
+						go tratarEleicao(eleicaoIDMensagem)
+					case msgOK:
+						fmt.Println("OK")
+						//okTimer.Stop()
+						okChan <- msgOK
+					case msgLIDER:
+						fmt.Println("Líder")
+						liderID.Set(eleicaoIDMensagem)
+						fmt.Println("Novo líder: ", liderID.Get())
+					case msgVIVO:
+						fmt.Println("Vivo")
+						enviarMensagemPara(msgVIVOOK, eleicaoIDMensagem)
+					case msgVIVOOK:
+						fmt.Println("Vivo_OK")
+						//liderTimer.Stop()
+						liderChan <- msgVIVOOK
+					case msgMORTO:
+						fmt.Println("Morto")
+						liderChan <- msgMORTO
+					case msgNAOOK:
+						fmt.Println("Não_OK")
+						okChan <- msgNAOOK
+					}
+				} else {
+					enviarMensagemPara(msgMORTO, eleicaoIDMensagem)
+				}
+			}(i, conn)
 		}
 	}
 
@@ -203,11 +241,17 @@ func broadcastEleicao() {
 	fmt.Println("Enviei ELEIÇÃO para todos")
 
 	fmt.Println("Aguardando OK...")
-	okTimer = time.AfterFunc(5*time.Second, func() {
+	ok := <-okChan
+	if ok != msgOK {
 		fmt.Println("Não recebi OK.")
 		broadcastLider()
 		fmt.Println("Enviei LIDER para todos")
-	})
+	}
+	/* okTimer = time.AfterFunc(5*time.Second, func() {
+		fmt.Println("Não recebi OK.")
+		broadcastLider()
+		fmt.Println("Enviei LIDER para todos")
+	}) */
 }
 
 func broadcastLider() {
