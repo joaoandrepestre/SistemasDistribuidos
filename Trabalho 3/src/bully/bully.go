@@ -23,6 +23,9 @@ const msgNAOOK int = 7
 
 const liderMorto int = -1
 
+const TRUE int = 1
+const FALSE int = 0
+
 // ThreadSafeInt - interface para impedir condição de corrida em variáveis globais
 type ThreadSafeInt struct {
 	value int32
@@ -61,8 +64,11 @@ var liderID ThreadSafeInt
 var numeroProcessos ThreadSafeInt
 var conexoesLeitura []*net.TCPConn
 var conexoesEscrita []*net.TCPConn
-var okChan chan int
-var liderChan chan int
+var recebiOK = ThreadSafeInt{value: 0}
+var recebiVIVOOK = ThreadSafeInt{value: 0}
+
+// var okChan
+// var liderChan = make(chan int)
 
 /* var okTimer *time.Timer
 var liderTimer *time.Timer */
@@ -74,10 +80,12 @@ func main() {
 
 	// Recupera os argumentos da linha de comando
 	args := os.Args[1:]
+
 	// Checa o número de parâmetros
 	if len(args) < 2 {
 		log.Fatal("Número de argumentos inválido. Forneça o número de processos e o ID do processo atual.")
 	}
+
 	tmp, _ := strconv.Atoi(args[0])
 	numeroProcessos.Set(tmp)
 	tmp, _ = strconv.Atoi(args[1])
@@ -138,14 +146,16 @@ func main() {
 func CheckLider() {
 	for {
 		if eleicaoID.Get() == 0 && liderID.Get() != eleicaoID.Get() && liderID.Get() != liderMorto {
-
+			recebiVIVOOK.Set(FALSE)
 			// Manda mensagem para lider para checar se está vivo
 			fmt.Println("Lider atual: ", liderID.Get())
 			enviarMensagemPara(msgVIVO, liderID.Get())
 			fmt.Println("Checou lider")
 
-			liderVivo := <-liderChan
-			if liderVivo != msgVIVOOK {
+			time.Sleep(3 * time.Second)
+
+			// liderVivo := <-liderChan
+			if recebiVIVOOK.Get() == FALSE {
 				fmt.Println("Lider não respondeu")
 				// Se lider está morto, manda eleição para todos os processos
 				liderID.Set(liderMorto)
@@ -166,10 +176,13 @@ func CheckLider() {
 func ReceiveMsg() {
 	var mensagem string
 	var err error
+	var wg sync.WaitGroup
 
 	for {
+		wg.Add(numeroProcessos.Get() - 1)
 		for i, conn := range conexoesLeitura {
 			go func(i int, conn *net.TCPConn) {
+				defer wg.Done()
 				fmt.Println("Lendo mensagem de: ", i)
 				mensagem, err = bufio.NewReader(conn).ReadString('\n')
 				fmt.Println("Recebeu mensagem ", mensagem)
@@ -190,7 +203,8 @@ func ReceiveMsg() {
 					case msgOK:
 						fmt.Println("OK")
 						//okTimer.Stop()
-						okChan <- msgOK
+						// okChan <- msgOK
+						recebiOK.Set(TRUE)
 					case msgLIDER:
 						fmt.Println("Líder")
 						liderID.Set(eleicaoIDMensagem)
@@ -201,21 +215,25 @@ func ReceiveMsg() {
 					case msgVIVOOK:
 						fmt.Println("Vivo_OK")
 						//liderTimer.Stop()
-						liderChan <- msgVIVOOK
+						// liderChan <- msgVIVOOK
+						recebiVIVOOK.Set(TRUE)
 					case msgMORTO:
 						fmt.Println("Morto")
-						liderChan <- msgMORTO
+						if eleicaoID.Get() == 0 {
+							// liderChan <- msgMORTO
+						}
 					case msgNAOOK:
 						fmt.Println("Não_OK")
-						okChan <- msgNAOOK
+						// okChan <- msgNAOOK
 					}
 				} else {
 					enviarMensagemPara(msgMORTO, eleicaoIDMensagem)
 				}
 			}(i, conn)
 		}
+		wg.Wait()
+		fmt.Println("oiiii")
 	}
-
 }
 
 func tratarEleicao(eleicaoIDMensagem int) {
@@ -226,6 +244,7 @@ func tratarEleicao(eleicaoIDMensagem int) {
 		broadcastEleicao()
 	} else {
 		fmt.Println("Meu ID é menor: ", eleicaoID.Get(), " < ", eleicaoIDMensagem)
+		enviarMensagemPara(msgNAOOK, eleicaoIDMensagem)
 	}
 }
 
@@ -235,14 +254,18 @@ func enviarMensagemPara(tipoMensagem int, id int) {
 }
 
 func broadcastEleicao() {
+	recebiOK.Set(FALSE)
 	for _, conn := range conexoesEscrita {
 		fmt.Fprintf(conn, "1|%d|%d\n", pid.Get(), eleicaoID.Get())
 	}
 	fmt.Println("Enviei ELEIÇÃO para todos")
 
 	fmt.Println("Aguardando OK...")
-	ok := <-okChan
-	if ok != msgOK {
+	// ok := <-okChan
+
+	time.Sleep(3 * time.Second)
+
+	if recebiOK.Get() == FALSE {
 		fmt.Println("Não recebi OK.")
 		broadcastLider()
 		fmt.Println("Enviei LIDER para todos")
