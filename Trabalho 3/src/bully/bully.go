@@ -176,13 +176,10 @@ func CheckLider() {
 func ReceiveMsg() {
 	var mensagem string
 	var err error
-	var wg sync.WaitGroup
 
 	for {
-		wg.Add(numeroProcessos.Get() - 1)
 		for i, conn := range conexoesLeitura {
 			go func(i int, conn *net.TCPConn) {
-				defer wg.Done()
 				fmt.Println("Lendo mensagem de: ", i)
 				mensagem, err = bufio.NewReader(conn).ReadString('\n')
 				fmt.Println("Recebeu mensagem ", mensagem)
@@ -231,7 +228,7 @@ func ReceiveMsg() {
 				}
 			}(i, conn)
 		}
-		wg.Wait()
+		time.Sleep(3 * time.Second)
 		fmt.Println("oiiii")
 	}
 }
