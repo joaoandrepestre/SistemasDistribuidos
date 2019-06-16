@@ -11,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	. "github.com/logrusorgru/aurora"
 )
 
 const msgELEICAO int = 1
@@ -41,6 +43,17 @@ func (t *ThreadSafeInt) Set(v int) {
 	atomic.StoreInt32(&t.value, int32(v))
 }
 
+// IncrementAndGet - incrementa valor em 1 e retorna
+func (t *ThreadSafeInt) IncrementAndGet() int {
+	atomic.StoreInt32(&t.value, int32(t.Get()+1))
+	return int(atomic.LoadInt32(&t.value))
+}
+
+// Decrement - decrementa o valor em 1
+func (t *ThreadSafeInt) Decrement() {
+	atomic.StoreInt32(&t.value, int32(t.Get()-1))
+}
+
 /* // ThreadSafeTimer - interface para impedir condição de corrida em variáveis globais
 type ThreadSafeTimer struct {
 	timer *time.Timer
@@ -66,6 +79,9 @@ var conexoesLeitura []*net.TCPConn
 var conexoesEscrita []*net.TCPConn
 var recebiOK = ThreadSafeInt{value: 0}
 var recebiVIVOOK = ThreadSafeInt{value: 0}
+var contadorMensagem = ThreadSafeInt{value: 0}
+var contadorDuranteUltimaEleicao = ThreadSafeInt{value: 0}
+var contadorDuranteUltimaChecagemLider = ThreadSafeInt{value: 0}
 
 // var okChan
 // var liderChan = make(chan int)
@@ -90,6 +106,7 @@ func main() {
 	numeroProcessos.Set(tmp)
 	tmp, _ = strconv.Atoi(args[1])
 	eleicaoID.Set(tmp)
+
 	// Checa se ID passado está dentro dos limites possíveis
 	if eleicaoID.Get() < 0 || eleicaoID.Get() >= numeroProcessos.Get() {
 		log.Fatal("Id para eleição inválido. Forneça um ID entre 0 e ", numeroProcessos.Get()-1)
@@ -103,19 +120,21 @@ func main() {
 	port = 4000 + eleicaoID.Get()
 	addr, _ := net.ResolveTCPAddr("tcp4", ":"+strconv.Itoa(port))
 	listener, err := net.ListenTCP("tcp", addr)
+
 	if err != nil {
 		log.Fatal("listen error:", err)
 	}
-	fmt.Println("Servindo em ", port)
 
+	fmt.Println(Yellow("Servindo em "), Yellow(port))
 	wg.Add(1)
+
 	// Aceita conexões e armazena no array servers
 	go func() {
 		defer wg.Done()
 		for i := 1; i < numeroProcessos.Get(); i++ {
 			conn, _ := listener.AcceptTCP()
 			conexoesLeitura = append(conexoesLeitura, conn)
-			fmt.Println("Aceitou conexão")
+			fmt.Println(Yellow("Aceitou conexão"))
 		}
 	}()
 
@@ -125,11 +144,13 @@ func main() {
 			port = 4000 + i
 			addr, _ = net.ResolveTCPAddr("tcp4", ":"+strconv.Itoa(port))
 			conn, err := net.DialTCP("tcp", nil, addr)
+
 			// Espera até a socket estar aberta para se conectar
 			for err != nil {
 				conn, err = net.DialTCP("tcp", nil, addr)
 			}
-			fmt.Println("Solicitou conexão de ", port)
+
+			fmt.Println(Yellow("Solicitou conexão de "), Yellow(port))
 			conexoesEscrita = append(conexoesEscrita, conn)
 		}
 	}
@@ -145,28 +166,26 @@ func main() {
 // CheckLider - função que periodicamente checa se líder está ativo
 func CheckLider() {
 	for {
-		if eleicaoID.Get() == 0 && liderID.Get() != eleicaoID.Get() && liderID.Get() != liderMorto {
+		if liderID.Get() != eleicaoID.Get() && liderID.Get() != liderMorto {
+			contadorDuranteUltimaChecagemLider.Set(contadorMensagem.IncrementAndGet())
 			recebiVIVOOK.Set(FALSE)
+
 			// Manda mensagem para lider para checar se está vivo
-			fmt.Println("Lider atual: ", liderID.Get())
+			// fmt.Println("Lider atual: ", liderID.Get())
+
 			enviarMensagemPara(msgVIVO, liderID.Get())
-			fmt.Println("Checou lider")
+			fmt.Println(Blue("Mensagem"), Blue(contadorDuranteUltimaChecagemLider.Get()), Blue("- Enviei VIVO para:"), Blue(liderID.Get()))
+			// fmt.Println("Checou lider")
 
 			time.Sleep(3 * time.Second)
 
-			// liderVivo := <-liderChan
 			if recebiVIVOOK.Get() == FALSE {
-				fmt.Println("Lider não respondeu")
+				fmt.Println(BrightRed("Mensagem"), BrightRed(contadorDuranteUltimaChecagemLider.Get()), BrightRed("- Lider não respondeu"))
+
 				// Se lider está morto, manda eleição para todos os processos
 				liderID.Set(liderMorto)
-				broadcastEleicao()
+				broadcastEleicao(true)
 			}
-			/* liderTimer = time.AfterFunc(5*time.Second, func() {
-				fmt.Println("Lider não respondeu")
-				// Se lider está morto, manda eleição para todos os processos
-				liderID.Set(-1)
-				broadcastEleicao()
-			}) */
 		}
 		time.Sleep(10 * time.Second)
 	}
@@ -180,68 +199,78 @@ func ReceiveMsg() {
 	for {
 		for i, conn := range conexoesLeitura {
 			go func(i int, conn *net.TCPConn) {
-				fmt.Println("Lendo mensagem de: ", i)
+				var numeroDaMensagem int
+
 				mensagem, err = bufio.NewReader(conn).ReadString('\n')
-				fmt.Println("Recebeu mensagem ", mensagem)
+				numeroDaMensagem = contadorMensagem.IncrementAndGet()
+
 				if err != nil {
 					log.Fatal("Read error: ", err)
 				}
-				splitMsg := strings.Split(mensagem[:len(mensagem)-1], "|")
+
+				mensagemTratada := strings.Split(mensagem, "\n")
+				splitMsg := strings.Split(mensagemTratada[0], "|")
 				tipo, _ := strconv.Atoi(splitMsg[0])
-				//pid_mensagem, _ := strconv.Atoi(splitMsg[1])
 				eleicaoIDMensagem, _ := strconv.Atoi(splitMsg[2])
-				fmt.Println("Recebeu mensagem de: ", eleicaoIDMensagem)
+
+				// fmt.Println(Yellow("Recebeu mensagem do processo"), Yellow(eleicaoIDMensagem))
+				// fmt.Println(Yellow("Mensagem:"), Yellow(mensagemTratada[0]))
 
 				if eleicaoID.Get() != numeroProcessos.Get()-1 {
 					switch tipo {
+
 					case msgELEICAO:
-						fmt.Println("Eleição")
-						go tratarEleicao(eleicaoIDMensagem)
+						fmt.Println(Green("Mensagem"), Green(numeroDaMensagem), Green("- Recebi Eleição de"), Green(eleicaoIDMensagem))
+						go tratarEleicao(eleicaoIDMensagem, numeroDaMensagem)
+
 					case msgOK:
-						fmt.Println("OK")
-						//okTimer.Stop()
-						// okChan <- msgOK
+						contadorMensagem.Decrement()
+						fmt.Println(Green("Mensagem"), Green(contadorDuranteUltimaEleicao.Get()), Green("- Recebi OK de"), Green(eleicaoIDMensagem))
 						recebiOK.Set(TRUE)
+
 					case msgLIDER:
-						fmt.Println("Líder")
+						fmt.Println(Green("Mensagem"), Green(numeroDaMensagem), Green("- Recebi Líder de"), Green(eleicaoIDMensagem))
 						liderID.Set(eleicaoIDMensagem)
-						fmt.Println("Novo líder: ", liderID.Get())
+						fmt.Println(Green("Mensagem"), Green(numeroDaMensagem), Green("- Novo líder: "), Green(liderID.Get()))
+
 					case msgVIVO:
-						fmt.Println("Vivo")
+						fmt.Println(Green("Mensagem"), Green(numeroDaMensagem), Green("- Recebi Vivo de"), Green(eleicaoIDMensagem))
+						fmt.Println(Blue("Mensagem"), Blue(numeroDaMensagem), Blue("- Enviei VIVO_OK para: "), Blue(eleicaoIDMensagem))
 						enviarMensagemPara(msgVIVOOK, eleicaoIDMensagem)
+
 					case msgVIVOOK:
-						fmt.Println("Vivo_OK")
-						//liderTimer.Stop()
-						// liderChan <- msgVIVOOK
+						contadorMensagem.Decrement()
+						fmt.Println(Green("Mensagem"), Green(contadorDuranteUltimaChecagemLider.Get()), Green("- Recebi Vivo_OK de"), Green(eleicaoIDMensagem))
 						recebiVIVOOK.Set(TRUE)
+
 					case msgMORTO:
-						fmt.Println("Morto")
-						if eleicaoID.Get() == 0 {
-							// liderChan <- msgMORTO
-						}
+						fmt.Println(Green("Mensagem"), Green(numeroDaMensagem), Green("- Recebi Morto de"), Green(eleicaoIDMensagem))
+
 					case msgNAOOK:
-						fmt.Println("Não_OK")
-						// okChan <- msgNAOOK
+						contadorMensagem.Decrement()
+						fmt.Println(Green("Mensagem"), Green(contadorDuranteUltimaEleicao.Get()), Green("- Recebi Não_OK de"), Green(eleicaoIDMensagem))
+
 					}
 				} else {
+					fmt.Println(Blue("Mensagem"), Blue(numeroDaMensagem), Blue("- Enviei MORTO para:"), Blue(eleicaoIDMensagem))
 					enviarMensagemPara(msgMORTO, eleicaoIDMensagem)
 				}
 			}(i, conn)
 		}
-		time.Sleep(3 * time.Second)
-		fmt.Println("oiiii")
+		time.Sleep(2 * time.Second)
 	}
 }
 
-func tratarEleicao(eleicaoIDMensagem int) {
+func tratarEleicao(eleicaoIDMensagem int, numeroDaMensagem int) {
 	if eleicaoID.Get() > eleicaoIDMensagem {
-		fmt.Println("Meu ID é maior: ", eleicaoID.Get(), " > ", eleicaoIDMensagem)
+		// fmt.Println(Green("Mensagem "), Green(numeroDaMensagem), Green("- Meu ID é maior: "), Green(eleicaoID.Get()), Green(" > "), Green(eleicaoIDMensagem))
 		enviarMensagemPara(msgOK, eleicaoIDMensagem)
-		fmt.Println("Enviei OK para: ", eleicaoIDMensagem)
-		broadcastEleicao()
+		fmt.Println(Blue("Mensagem"), Blue(numeroDaMensagem), Blue("- Enviei OK para:"), Blue(eleicaoIDMensagem))
+		broadcastEleicao(false)
 	} else {
-		fmt.Println("Meu ID é menor: ", eleicaoID.Get(), " < ", eleicaoIDMensagem)
+		// fmt.Println(Green("Mensagem "), Green(numeroDaMensagem), Green("- Meu ID é menor: "), Green(eleicaoID.Get()), Green(" < "), Green(eleicaoIDMensagem))
 		enviarMensagemPara(msgNAOOK, eleicaoIDMensagem)
+		fmt.Println(Blue("Mensagem"), Blue(numeroDaMensagem), Blue("- Enviei Não_OK para:"), Blue(eleicaoIDMensagem))
 	}
 }
 
@@ -250,28 +279,29 @@ func enviarMensagemPara(tipoMensagem int, id int) {
 	fmt.Fprintf(conexoesEscrita[index], "%d|%d|%d\n", tipoMensagem, pid.Get(), eleicaoID.Get())
 }
 
-func broadcastEleicao() {
+func broadcastEleicao(eleicaoPorLiderEstarMorto bool) {
+	if eleicaoPorLiderEstarMorto {
+		contadorDuranteUltimaEleicao.Set(contadorDuranteUltimaChecagemLider.Get())
+	} else {
+		contadorDuranteUltimaEleicao.Set(contadorMensagem.IncrementAndGet())
+	}
+
 	recebiOK.Set(FALSE)
+
 	for _, conn := range conexoesEscrita {
 		fmt.Fprintf(conn, "1|%d|%d\n", pid.Get(), eleicaoID.Get())
 	}
-	fmt.Println("Enviei ELEIÇÃO para todos")
 
-	fmt.Println("Aguardando OK...")
-	// ok := <-okChan
+	fmt.Println(Blue("Mensagem"), Blue(contadorDuranteUltimaEleicao.Get()), Blue("- Enviei ELEIÇÃO para todos"))
+	fmt.Println(Blue("Mensagem"), Blue(contadorDuranteUltimaEleicao.Get()), Blue("- Aguardando OK..."))
 
 	time.Sleep(3 * time.Second)
 
 	if recebiOK.Get() == FALSE {
-		fmt.Println("Não recebi OK.")
+		fmt.Println(BrightRed("Mensagem"), BrightRed(contadorDuranteUltimaEleicao.Get()), BrightRed("- Não recebi OK."))
 		broadcastLider()
-		fmt.Println("Enviei LIDER para todos")
+		fmt.Println(Blue("Mensagem"), Blue(contadorDuranteUltimaEleicao.Get()), Blue("- Enviei LIDER para todos"))
 	}
-	/* okTimer = time.AfterFunc(5*time.Second, func() {
-		fmt.Println("Não recebi OK.")
-		broadcastLider()
-		fmt.Println("Enviei LIDER para todos")
-	}) */
 }
 
 func broadcastLider() {
