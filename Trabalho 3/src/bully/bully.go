@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/eiannone/keyboard"
 	. "github.com/logrusorgru/aurora"
 )
 
@@ -22,8 +23,6 @@ const msgVIVO int = 4
 const msgVIVOOK int = 5
 const msgMORTO int = 6
 const msgNAOOK int = 7
-
-const liderMorto int = -1
 
 const TRUE int = 1
 const FALSE int = 0
@@ -59,22 +58,36 @@ func (t *ThreadSafeInt) Increment() {
 	atomic.StoreInt32(&t.value, int32(t.Get()+1))
 }
 
-/* // ThreadSafeTimer - interface para impedir condição de corrida em variáveis globais
-type ThreadSafeTimer struct {
-	timer *time.Timer
-	mutex sync.Mutex
+// ThreadSafeBool - estrutura booleana com operações atômicas
+type ThreadSafeBool struct {
+	lock  sync.Mutex
+	value bool
 }
 
-// Set - utiliza mutex para serializar escrita no timer
-func (t *ThreadSafeTimer) Set(timer *time.Timer) {
-	t.mutex.Lock()
-	if t.timer == nil {
-		t.timer = timer
-	} else {
-		t.timer.Reset(5 * time.Second)
-	}
-	t.mutex.Unlock()
-} */
+// Toggle - mudar valor do booleano
+func (t *ThreadSafeBool) Toggle() {
+	t.lock.Lock()
+	t.value = !t.value
+	t.lock.Unlock()
+}
+
+// Get - pegar valor do booleano
+func (t *ThreadSafeBool) Get() bool {
+	var temp bool
+
+	t.lock.Lock()
+	temp = t.value
+	t.lock.Unlock()
+
+	return temp
+}
+
+// Set - sobrescrever valor do booleano
+func (t *ThreadSafeBool) Set(value bool) {
+	t.lock.Lock()
+	t.value = value
+	t.lock.Unlock()
+}
 
 var pid ThreadSafeInt
 var eleicaoID ThreadSafeInt
@@ -82,8 +95,9 @@ var liderID ThreadSafeInt
 var numeroProcessos ThreadSafeInt
 var conexoesLeitura []*net.TCPConn
 var conexoesEscrita []*net.TCPConn
-var recebiOK = ThreadSafeInt{value: 0}
-var recebiVIVOOK = ThreadSafeInt{value: 0}
+
+var recebiOK = ThreadSafeBool{value: false}
+var recebiVIVOOK = ThreadSafeBool{value: false}
 
 var contadorMensagem = ThreadSafeInt{value: 0}
 var contadorDuranteUltimaEleicao = ThreadSafeInt{value: 0}
@@ -91,6 +105,9 @@ var contadorDuranteUltimaChecagemLider = ThreadSafeInt{value: 0}
 
 var contadorMensagensRecebidas = [7]ThreadSafeInt{{value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}}
 var contadorMensagensEnviadas = [7]ThreadSafeInt{{value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}}
+
+var noMorto = ThreadSafeBool{value: false}
+var checarLider = ThreadSafeBool{value: true}
 
 func main() {
 
@@ -160,37 +177,79 @@ func main() {
 	// Espera todas as conexões serem aceitas
 	wg.Wait()
 
+	imprimirHelp()
+
 	wg.Add(2)
 	go CheckLider()
 	go ReceiveMsg()
+	go InterfaceTeclado()
 	wg.Wait()
+}
+
+func imprimirHelp() {
+	fmt.Printf("\nComandos da interface:\n" +
+		"Ctrl l - Ativa/desativa checagem de líder (padrão: ativo)\n" +
+		"Ctrl e - Imprime estatísticas de mensagem do nó\n" +
+		"Ctrl m - Mata/revive nó (padrão: vivo)\n" +
+		"Ctrl h - Imprimir esta lista de comandos\n" +
+		"ESC - Finaliza o processo (pode causar READ ERROR nos demais processos)\n\n")
+}
+
+// InterfaceTeclado - thread que trata input de teclado
+func InterfaceTeclado() {
+	// c - checarLider
+	// e - estatíticas
+	// m - matar nó/reviver nó
+
+	err := keyboard.Open()
+	if err != nil {
+		panic(err)
+	}
+	defer keyboard.Close()
+
+	for {
+		_, key, _ := keyboard.GetKey()
+
+		switch key {
+		case keyboard.KeyCtrlL:
+			checarLider.Toggle()
+			fmt.Println("\nChecar líder alterado:", checarLider.Get(), "\n")
+		case keyboard.KeyCtrlE:
+			imprimirEstatisticas()
+		case keyboard.KeyCtrlM:
+			noMorto.Toggle()
+			fmt.Println("\nNó morto alterado:", noMorto.Get(), "\n")
+		case keyboard.KeyCtrlH:
+			imprimirHelp()
+		case keyboard.KeyEsc:
+			fmt.Println("\nFinalizando processo...\n")
+			os.Exit(0)
+		}
+	}
 }
 
 // CheckLider - função que periodicamente checa se líder está ativo
 func CheckLider() {
 	for {
-		if liderID.Get() != eleicaoID.Get() && liderID.Get() != liderMorto {
+		if liderID.Get() != eleicaoID.Get() && checarLider.Get() && liderID.Get() != -1 && !noMorto.Get() {
 			contadorDuranteUltimaChecagemLider.Set(contadorMensagem.IncrementAndGet())
-			recebiVIVOOK.Set(FALSE)
+			recebiVIVOOK.Set(false)
 
 			// Manda mensagem para lider para checar se está vivo
-			// fmt.Println("Lider atual: ", liderID.Get())
-
 			enviarMensagemPara(msgVIVO, liderID.Get())
 			fmt.Println(Blue("Mensagem"), Blue(contadorDuranteUltimaChecagemLider.Get()), Blue("- Enviei VIVO para:"), Blue(liderID.Get()))
-			// fmt.Println("Checou lider")
 
 			time.Sleep(3 * time.Second)
 
-			if recebiVIVOOK.Get() == FALSE {
+			if !recebiVIVOOK.Get() {
 				fmt.Println(BrightRed("Mensagem"), BrightRed(contadorDuranteUltimaChecagemLider.Get()), BrightRed("- Lider não respondeu"))
 
 				// Se lider está morto, manda eleição para todos os processos
-				liderID.Set(liderMorto)
+				liderID.Set(-1)
 				broadcastEleicao(true)
 			}
+			time.Sleep(10 * time.Second)
 		}
-		time.Sleep(10 * time.Second)
 	}
 }
 
@@ -218,7 +277,7 @@ func ReceiveMsg() {
 
 				contadorMensagensRecebidas[tipo-1].Increment()
 
-				if eleicaoID.Get() != numeroProcessos.Get()-1 {
+				if !noMorto.Get() {
 					switch tipo {
 
 					case msgELEICAO:
@@ -228,7 +287,7 @@ func ReceiveMsg() {
 					case msgOK:
 						contadorMensagem.Decrement()
 						fmt.Println(Green("Mensagem"), Green(contadorDuranteUltimaEleicao.Get()), Green("- Recebi OK de"), Green(eleicaoIDMensagem))
-						recebiOK.Set(TRUE)
+						recebiOK.Set(true)
 
 					case msgLIDER:
 						fmt.Println(Green("Mensagem"), Green(numeroDaMensagem), Green("- Recebi Líder de"), Green(eleicaoIDMensagem))
@@ -243,7 +302,7 @@ func ReceiveMsg() {
 					case msgVIVOOK:
 						contadorMensagem.Decrement()
 						fmt.Println(Green("Mensagem"), Green(contadorDuranteUltimaChecagemLider.Get()), Green("- Recebi Vivo_OK de"), Green(eleicaoIDMensagem))
-						recebiVIVOOK.Set(TRUE)
+						recebiVIVOOK.Set(true)
 
 					case msgMORTO:
 						fmt.Println(Green("Mensagem"), Green(numeroDaMensagem), Green("- Recebi Morto de"), Green(eleicaoIDMensagem))
@@ -254,6 +313,9 @@ func ReceiveMsg() {
 
 					}
 				} else {
+					if tipo == msgLIDER {
+						liderID.Set(eleicaoIDMensagem)
+					}
 					fmt.Println(Blue("Mensagem"), Blue(numeroDaMensagem), Blue("- Enviei MORTO para:"), Blue(eleicaoIDMensagem))
 					enviarMensagemPara(msgMORTO, eleicaoIDMensagem)
 				}
@@ -289,9 +351,10 @@ func broadcastEleicao(eleicaoPorLiderEstarMorto bool) {
 
 	var numeracaoContador = contadorDuranteUltimaEleicao.Get()
 
-	recebiOK.Set(FALSE)
+	recebiOK.Set(false)
 
 	for _, conn := range conexoesEscrita {
+		contadorMensagensEnviadas[msgELEICAO-1].Increment()
 		fmt.Fprintf(conn, "1|%d|%d\n", pid.Get(), eleicaoID.Get())
 	}
 
@@ -300,7 +363,7 @@ func broadcastEleicao(eleicaoPorLiderEstarMorto bool) {
 
 	time.Sleep(3 * time.Second)
 
-	if recebiOK.Get() == FALSE {
+	if !recebiOK.Get() {
 		fmt.Println(BrightRed("Mensagem"), BrightRed(numeracaoContador), BrightRed("- Não recebi OK."))
 		broadcastLider()
 		fmt.Println(Blue("Mensagem"), Blue(numeracaoContador), Blue("- Enviei LIDER para todos"))
@@ -310,6 +373,7 @@ func broadcastEleicao(eleicaoPorLiderEstarMorto bool) {
 func broadcastLider() {
 	liderID.Set(eleicaoID.Get())
 	for _, conn := range conexoesEscrita {
+		contadorMensagensEnviadas[msgLIDER-1].Increment()
 		fmt.Fprintf(conn, "3|%d|%d\n", pid.Get(), eleicaoID.Get())
 	}
 }
@@ -320,4 +384,22 @@ func clientIndex(id int) int {
 		index--
 	}
 	return index
+}
+
+func imprimirEstatisticas() {
+	fmt.Printf("\nMENSAGENS:\n"+
+		"Eleição: 	%d enviadas, %d recebidas\n"+
+		"OK: 		%d enviadas, %d recebidas\n"+
+		"Líder:		%d enviadas, %d recebidas\n"+
+		"Vivo: 		%d enviadas, %d recebidas\n"+
+		"Vivo_OK: 	%d enviadas, %d recebidas\n"+
+		"Morto:		%d enviadas, %d recebidas\n"+
+		"Não_OK: 	%d enviadas, %d recebidas\n\n",
+		contadorMensagensEnviadas[msgELEICAO-1].Get(), contadorMensagensRecebidas[msgELEICAO-1].Get(),
+		contadorMensagensEnviadas[msgOK-1].Get(), contadorMensagensRecebidas[msgOK-1].Get(),
+		contadorMensagensEnviadas[msgLIDER-1].Get(), contadorMensagensRecebidas[msgLIDER-1].Get(),
+		contadorMensagensEnviadas[msgVIVO-1].Get(), contadorMensagensRecebidas[msgVIVO-1].Get(),
+		contadorMensagensEnviadas[msgVIVOOK-1].Get(), contadorMensagensRecebidas[msgVIVOOK-1].Get(),
+		contadorMensagensEnviadas[msgMORTO-1].Get(), contadorMensagensRecebidas[msgMORTO-1].Get(),
+		contadorMensagensEnviadas[msgNAOOK-1].Get(), contadorMensagensRecebidas[msgNAOOK-1].Get())
 }
