@@ -54,6 +54,11 @@ func (t *ThreadSafeInt) Decrement() {
 	atomic.StoreInt32(&t.value, int32(t.Get()-1))
 }
 
+// Increment - incrementa o valor em 1
+func (t *ThreadSafeInt) Increment() {
+	atomic.StoreInt32(&t.value, int32(t.Get()+1))
+}
+
 /* // ThreadSafeTimer - interface para impedir condição de corrida em variáveis globais
 type ThreadSafeTimer struct {
 	timer *time.Timer
@@ -79,15 +84,13 @@ var conexoesLeitura []*net.TCPConn
 var conexoesEscrita []*net.TCPConn
 var recebiOK = ThreadSafeInt{value: 0}
 var recebiVIVOOK = ThreadSafeInt{value: 0}
+
 var contadorMensagem = ThreadSafeInt{value: 0}
 var contadorDuranteUltimaEleicao = ThreadSafeInt{value: 0}
 var contadorDuranteUltimaChecagemLider = ThreadSafeInt{value: 0}
 
-// var okChan
-// var liderChan = make(chan int)
-
-/* var okTimer *time.Timer
-var liderTimer *time.Timer */
+var contadorMensagensRecebidas = [7]ThreadSafeInt{{value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}}
+var contadorMensagensEnviadas = [7]ThreadSafeInt{{value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}}
 
 func main() {
 
@@ -213,8 +216,7 @@ func ReceiveMsg() {
 				tipo, _ := strconv.Atoi(splitMsg[0])
 				eleicaoIDMensagem, _ := strconv.Atoi(splitMsg[2])
 
-				// fmt.Println(Yellow("Recebeu mensagem do processo"), Yellow(eleicaoIDMensagem))
-				// fmt.Println(Yellow("Mensagem:"), Yellow(mensagemTratada[0]))
+				contadorMensagensRecebidas[tipo-1].Increment()
 
 				if eleicaoID.Get() != numeroProcessos.Get()-1 {
 					switch tipo {
@@ -235,7 +237,7 @@ func ReceiveMsg() {
 
 					case msgVIVO:
 						fmt.Println(Green("Mensagem"), Green(numeroDaMensagem), Green("- Recebi Vivo de"), Green(eleicaoIDMensagem))
-						fmt.Println(Blue("Mensagem"), Blue(numeroDaMensagem), Blue("- Enviei VIVO_OK para: "), Blue(eleicaoIDMensagem))
+						fmt.Println(Blue("Mensagem"), Blue(numeroDaMensagem), Blue("- Enviei VIVO_OK para:"), Blue(eleicaoIDMensagem))
 						enviarMensagemPara(msgVIVOOK, eleicaoIDMensagem)
 
 					case msgVIVOOK:
@@ -263,18 +265,17 @@ func ReceiveMsg() {
 
 func tratarEleicao(eleicaoIDMensagem int, numeroDaMensagem int) {
 	if eleicaoID.Get() > eleicaoIDMensagem {
-		// fmt.Println(Green("Mensagem "), Green(numeroDaMensagem), Green("- Meu ID é maior: "), Green(eleicaoID.Get()), Green(" > "), Green(eleicaoIDMensagem))
 		enviarMensagemPara(msgOK, eleicaoIDMensagem)
 		fmt.Println(Blue("Mensagem"), Blue(numeroDaMensagem), Blue("- Enviei OK para:"), Blue(eleicaoIDMensagem))
 		broadcastEleicao(false)
 	} else {
-		// fmt.Println(Green("Mensagem "), Green(numeroDaMensagem), Green("- Meu ID é menor: "), Green(eleicaoID.Get()), Green(" < "), Green(eleicaoIDMensagem))
 		enviarMensagemPara(msgNAOOK, eleicaoIDMensagem)
 		fmt.Println(Blue("Mensagem"), Blue(numeroDaMensagem), Blue("- Enviei Não_OK para:"), Blue(eleicaoIDMensagem))
 	}
 }
 
 func enviarMensagemPara(tipoMensagem int, id int) {
+	contadorMensagensEnviadas[tipoMensagem-1].Increment()
 	index := clientIndex(id)
 	fmt.Fprintf(conexoesEscrita[index], "%d|%d|%d\n", tipoMensagem, pid.Get(), eleicaoID.Get())
 }
@@ -286,21 +287,23 @@ func broadcastEleicao(eleicaoPorLiderEstarMorto bool) {
 		contadorDuranteUltimaEleicao.Set(contadorMensagem.IncrementAndGet())
 	}
 
+	var numeracaoContador = contadorDuranteUltimaEleicao.Get()
+
 	recebiOK.Set(FALSE)
 
 	for _, conn := range conexoesEscrita {
 		fmt.Fprintf(conn, "1|%d|%d\n", pid.Get(), eleicaoID.Get())
 	}
 
-	fmt.Println(Blue("Mensagem"), Blue(contadorDuranteUltimaEleicao.Get()), Blue("- Enviei ELEIÇÃO para todos"))
-	fmt.Println(Blue("Mensagem"), Blue(contadorDuranteUltimaEleicao.Get()), Blue("- Aguardando OK..."))
+	fmt.Println(Blue("Mensagem"), Blue(numeracaoContador), Blue("- Enviei ELEIÇÃO para todos"))
+	fmt.Println(Blue("Mensagem"), Blue(numeracaoContador), Blue("- Aguardando OK..."))
 
 	time.Sleep(3 * time.Second)
 
 	if recebiOK.Get() == FALSE {
-		fmt.Println(BrightRed("Mensagem"), BrightRed(contadorDuranteUltimaEleicao.Get()), BrightRed("- Não recebi OK."))
+		fmt.Println(BrightRed("Mensagem"), BrightRed(numeracaoContador), BrightRed("- Não recebi OK."))
 		broadcastLider()
-		fmt.Println(Blue("Mensagem"), Blue(contadorDuranteUltimaEleicao.Get()), Blue("- Enviei LIDER para todos"))
+		fmt.Println(Blue("Mensagem"), Blue(numeracaoContador), Blue("- Enviei LIDER para todos"))
 	}
 }
 
