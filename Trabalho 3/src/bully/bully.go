@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"bufio"
 	"fmt"
 	"log"
@@ -104,7 +105,7 @@ var contadorMensagensRecebidas = [7]ThreadSafeInt{{value: 0}, {value: 0}, {value
 var contadorMensagensEnviadas = [7]ThreadSafeInt{{value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}}
 
 var noMorto = ThreadSafeBool{value: false}
-var checarLider = ThreadSafeBool{value: true}
+var checarLider = ThreadSafeBool{value: false}
 
 var wg sync.WaitGroup
 
@@ -186,7 +187,7 @@ func main() {
 
 func imprimirHelp() {
 	fmt.Printf("\nComandos da interface:\n" +
-		"Ctrl l - Ativa/desativa checagem de líder (padrão: ativo)\n" +
+		"Ctrl l - Ativa/desativa checagem de líder (padrão: inativo)\n" +
 		"Ctrl e - Imprime estatísticas de mensagem do nó\n" +
 		"Ctrl m - Mata/revive nó (padrão: vivo)\n" +
 		"Ctrl h - Imprimir esta lista de comandos\n" +
@@ -222,8 +223,9 @@ func InterfaceTeclado() {
 		case keyboard.KeyCtrlH:
 			imprimirHelp()
 		case keyboard.KeyEsc:
-			fmt.Println("\nFinalizando processo...\n")
-			os.Exit(0)
+			finalizarProcesso()
+		case keyboard.KeyCtrlC:
+			finalizarProcesso()
 		}
 	}
 }
@@ -263,6 +265,7 @@ func ReceiveMsg() {
 
 	var mensagem string
 	var err error
+	var lock sync.Mutex
 
 	for {
 		for i, conn := range conexoesLeitura {
@@ -271,9 +274,13 @@ func ReceiveMsg() {
 
 				mensagem, err = bufio.NewReader(conn).ReadString('\n')
 				numeroDaMensagem = contadorMensagem.IncrementAndGet()
-
-				if err != nil {
-					log.Fatal("Read error: ", err)
+				if err == io.EOF{
+					lock.Lock()
+					fmt.Println("Não foi possível ler de processo finalizado.")
+					finalizarProcesso()
+					lock.Unlock()
+				} else if err != nil {
+					log.Fatal("", err)
 				}
 
 				mensagemTratada := strings.Split(mensagem, "\n")
@@ -400,12 +407,20 @@ func imprimirEstatisticas() {
 		"Vivo: 		%d enviadas, %d recebidas\n"+
 		"Vivo_OK: 	%d enviadas, %d recebidas\n"+
 		"Morto:		%d enviadas, %d recebidas\n"+
-		"Não_OK: 	%d enviadas, %d recebidas\n\n",
+		"Não_OK: 	%d enviadas, %d recebidas\n\n"+
+		"Processo Líder: %d\n\n",
 		contadorMensagensEnviadas[msgELEICAO-1].Get(), contadorMensagensRecebidas[msgELEICAO-1].Get(),
 		contadorMensagensEnviadas[msgOK-1].Get(), contadorMensagensRecebidas[msgOK-1].Get(),
 		contadorMensagensEnviadas[msgLIDER-1].Get(), contadorMensagensRecebidas[msgLIDER-1].Get(),
 		contadorMensagensEnviadas[msgVIVO-1].Get(), contadorMensagensRecebidas[msgVIVO-1].Get(),
 		contadorMensagensEnviadas[msgVIVOOK-1].Get(), contadorMensagensRecebidas[msgVIVOOK-1].Get(),
 		contadorMensagensEnviadas[msgMORTO-1].Get(), contadorMensagensRecebidas[msgMORTO-1].Get(),
-		contadorMensagensEnviadas[msgNAOOK-1].Get(), contadorMensagensRecebidas[msgNAOOK-1].Get())
+		contadorMensagensEnviadas[msgNAOOK-1].Get(), contadorMensagensRecebidas[msgNAOOK-1].Get(),
+		liderID.Get())
+}
+
+func finalizarProcesso(){
+	fmt.Println("\nFinalizando processo...\n")
+	keyboard.Close()
+	os.Exit(0)
 }
