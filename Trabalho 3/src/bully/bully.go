@@ -24,9 +24,6 @@ const msgVIVOOK int = 5
 const msgMORTO int = 6
 const msgNAOOK int = 7
 
-const TRUE int = 1
-const FALSE int = 0
-
 // ThreadSafeInt - interface para impedir condição de corrida em variáveis globais
 type ThreadSafeInt struct {
 	value int32
@@ -109,9 +106,10 @@ var contadorMensagensEnviadas = [7]ThreadSafeInt{{value: 0}, {value: 0}, {value:
 var noMorto = ThreadSafeBool{value: false}
 var checarLider = ThreadSafeBool{value: true}
 
+var wg sync.WaitGroup
+
 func main() {
 
-	var wg sync.WaitGroup
 	var port int
 
 	// Recupera os argumentos da linha de comando
@@ -179,7 +177,7 @@ func main() {
 
 	imprimirHelp()
 
-	wg.Add(2)
+	wg.Add(3)
 	go CheckLider()
 	go ReceiveMsg()
 	go InterfaceTeclado()
@@ -197,6 +195,8 @@ func imprimirHelp() {
 
 // InterfaceTeclado - thread que trata input de teclado
 func InterfaceTeclado() {
+
+	defer wg.Done()
 	// c - checarLider
 	// e - estatíticas
 	// m - matar nó/reviver nó
@@ -230,6 +230,9 @@ func InterfaceTeclado() {
 
 // CheckLider - função que periodicamente checa se líder está ativo
 func CheckLider() {
+
+	defer wg.Done()
+
 	for {
 		if liderID.Get() != eleicaoID.Get() && checarLider.Get() && liderID.Get() != -1 && !noMorto.Get() {
 			contadorDuranteUltimaChecagemLider.Set(contadorMensagem.IncrementAndGet())
@@ -255,6 +258,9 @@ func CheckLider() {
 
 // ReceiveMsg - função que recebe e trata as mensagens recebidas
 func ReceiveMsg() {
+
+	defer wg.Done()
+
 	var mensagem string
 	var err error
 
