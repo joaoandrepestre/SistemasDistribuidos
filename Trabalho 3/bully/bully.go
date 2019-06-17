@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
+	"../safe"
 	"github.com/eiannone/keyboard"
 	. "github.com/logrusorgru/aurora"
 )
@@ -25,87 +25,26 @@ const msgVIVOOK int = 5
 const msgMORTO int = 6
 const msgNAOOK int = 7
 
-// ThreadSafeInt - interface para impedir condição de corrida em variáveis globais
-type ThreadSafeInt struct {
-	value int32
-}
 
-// Get - utiliza biblioteca atomic para serializar a leitura ao valor armazenado
-func (t *ThreadSafeInt) Get() int {
-	return int(atomic.LoadInt32(&t.value))
-}
-
-// Set - utiliza biblioteca atomic para serializar a escrita ao valor armazenado
-func (t *ThreadSafeInt) Set(v int) {
-	atomic.StoreInt32(&t.value, int32(v))
-}
-
-// IncrementAndGet - incrementa valor em 1 e retorna
-func (t *ThreadSafeInt) IncrementAndGet() int {
-	atomic.StoreInt32(&t.value, int32(t.Get()+1))
-	return int(atomic.LoadInt32(&t.value))
-}
-
-// Decrement - decrementa o valor em 1
-func (t *ThreadSafeInt) Decrement() {
-	atomic.StoreInt32(&t.value, int32(t.Get()-1))
-}
-
-// Increment - incrementa o valor em 1
-func (t *ThreadSafeInt) Increment() {
-	atomic.StoreInt32(&t.value, int32(t.Get()+1))
-}
-
-// ThreadSafeBool - estrutura booleana com operações atômicas
-type ThreadSafeBool struct {
-	lock  sync.Mutex
-	value bool
-}
-
-// Toggle - mudar valor do booleano
-func (t *ThreadSafeBool) Toggle() {
-	t.lock.Lock()
-	t.value = !t.value
-	t.lock.Unlock()
-}
-
-// Get - pegar valor do booleano
-func (t *ThreadSafeBool) Get() bool {
-	var temp bool
-
-	t.lock.Lock()
-	temp = t.value
-	t.lock.Unlock()
-
-	return temp
-}
-
-// Set - sobrescrever valor do booleano
-func (t *ThreadSafeBool) Set(value bool) {
-	t.lock.Lock()
-	t.value = value
-	t.lock.Unlock()
-}
-
-var pid ThreadSafeInt
-var eleicaoID ThreadSafeInt
-var liderID ThreadSafeInt
-var numeroProcessos ThreadSafeInt
+var pid safe.ThreadSafeInt
+var eleicaoID safe.ThreadSafeInt
+var liderID safe.ThreadSafeInt
+var numeroProcessos safe.ThreadSafeInt
 var conexoesLeitura []*net.TCPConn
 var conexoesEscrita []*net.TCPConn
 
-var recebiOK = ThreadSafeBool{value: false}
-var recebiVIVOOK = ThreadSafeBool{value: false}
+var recebiOK = safe.ThreadSafeBool{Value: false}
+var recebiVIVOOK = safe.ThreadSafeBool{Value: false}
 
-var contadorMensagem = ThreadSafeInt{value: 0}
-var contadorDuranteUltimaEleicao = ThreadSafeInt{value: 0}
-var contadorDuranteUltimaChecagemLider = ThreadSafeInt{value: 0}
+var contadorMensagem = safe.ThreadSafeInt{Value: 0}
+var contadorDuranteUltimaEleicao = safe.ThreadSafeInt{Value: 0}
+var contadorDuranteUltimaChecagemLider = safe.ThreadSafeInt{Value: 0}
 
-var contadorMensagensRecebidas = [7]ThreadSafeInt{{value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}}
-var contadorMensagensEnviadas = [7]ThreadSafeInt{{value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}, {value: 0}}
+var contadorMensagensRecebidas = [7]safe.ThreadSafeInt{{Value: 0}, {Value: 0}, {Value: 0}, {Value: 0}, {Value: 0}, {Value: 0}, {Value: 0}}
+var contadorMensagensEnviadas = [7]safe.ThreadSafeInt{{Value: 0}, {Value: 0}, {Value: 0}, {Value: 0}, {Value: 0}, {Value: 0}, {Value: 0}}
 
-var noMorto = ThreadSafeBool{value: false}
-var checarLider = ThreadSafeBool{value: false}
+var noMorto = safe.ThreadSafeBool{Value: false}
+var checarLider = safe.ThreadSafeBool{Value: false}
 
 var wg sync.WaitGroup
 
