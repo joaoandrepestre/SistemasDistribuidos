@@ -1,9 +1,9 @@
 package main
 
 import (
-	"io"
 	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -25,7 +25,6 @@ const msgVIVOOK int = 5
 const msgMORTO int = 6
 const msgNAOOK int = 7
 
-
 var pid safe.ThreadSafeInt
 var eleicaoID safe.ThreadSafeInt
 var liderID safe.ThreadSafeInt
@@ -44,7 +43,7 @@ var contadorMensagensRecebidas = [7]safe.ThreadSafeInt{{Value: 0}, {Value: 0}, {
 var contadorMensagensEnviadas = [7]safe.ThreadSafeInt{{Value: 0}, {Value: 0}, {Value: 0}, {Value: 0}, {Value: 0}, {Value: 0}, {Value: 0}}
 
 var noMorto = safe.ThreadSafeBool{Value: false}
-var checarLider = safe.ThreadSafeBool{Value: false}
+var checarLider = safe.ThreadSafeBool{Value: true}
 
 var wg sync.WaitGroup
 
@@ -153,12 +152,12 @@ func InterfaceTeclado() {
 		switch key {
 		case keyboard.KeyCtrlL:
 			checarLider.Toggle()
-			fmt.Println("\nChecar líder alterado:", checarLider.Get(), "\n")
+			fmt.Println(Magenta("\nChecar líder alterado:"), Magenta(checarLider.Get()), "\n")
 		case keyboard.KeyCtrlE:
 			imprimirEstatisticas()
 		case keyboard.KeyCtrlM:
 			noMorto.Toggle()
-			fmt.Println("\nNó morto alterado:", noMorto.Get(), "\n")
+			fmt.Println(Magenta("\nNó morto alterado:"), Magenta(noMorto.Get()), "\n")
 		case keyboard.KeyCtrlH:
 			imprimirHelp()
 		case keyboard.KeyEsc:
@@ -186,11 +185,12 @@ func CheckLider() {
 			time.Sleep(3 * time.Second)
 
 			if !recebiVIVOOK.Get() {
-				fmt.Println(BrightRed("Mensagem"), BrightRed(contadorDuranteUltimaChecagemLider.Get()), BrightRed("- Lider não respondeu"))
+				var numeracaoContador = contadorDuranteUltimaChecagemLider.Get()
+				fmt.Println(BrightRed("Mensagem"), BrightRed(numeracaoContador), BrightRed("- Lider não respondeu"))
 
 				// Se lider está morto, manda eleição para todos os processos
 				liderID.Set(-1)
-				broadcastEleicao(true)
+				broadcastEleicao(numeracaoContador)
 			}
 			time.Sleep(10 * time.Second)
 		}
@@ -213,9 +213,9 @@ func ReceiveMsg() {
 
 				mensagem, err = bufio.NewReader(conn).ReadString('\n')
 				numeroDaMensagem = contadorMensagem.IncrementAndGet()
-				if err == io.EOF{
+				if err == io.EOF {
 					lock.Lock()
-					fmt.Println("Não foi possível ler de processo finalizado.")
+					fmt.Println("\nNão foi possível ler de processo finalizado.")
 					finalizarProcesso()
 					lock.Unlock()
 				} else if err != nil {
@@ -257,7 +257,7 @@ func ReceiveMsg() {
 						recebiVIVOOK.Set(true)
 
 					case msgMORTO:
-						fmt.Println(Green("Mensagem"), Green(numeroDaMensagem), Green("- Recebi Morto de"), Green(eleicaoIDMensagem))
+						contadorMensagem.Decrement()
 
 					case msgNAOOK:
 						contadorMensagem.Decrement()
@@ -273,7 +273,7 @@ func ReceiveMsg() {
 				}
 			}(i, conn)
 		}
-		time.Sleep(2 * time.Second)
+		time.Sleep(10 * time.Second)
 	}
 }
 
@@ -281,7 +281,7 @@ func tratarEleicao(eleicaoIDMensagem int, numeroDaMensagem int) {
 	if eleicaoID.Get() > eleicaoIDMensagem {
 		enviarMensagemPara(msgOK, eleicaoIDMensagem)
 		fmt.Println(Blue("Mensagem"), Blue(numeroDaMensagem), Blue("- Enviei OK para:"), Blue(eleicaoIDMensagem))
-		broadcastEleicao(false)
+		broadcastEleicao(numeroDaMensagem)
 	} else {
 		enviarMensagemPara(msgNAOOK, eleicaoIDMensagem)
 		fmt.Println(Blue("Mensagem"), Blue(numeroDaMensagem), Blue("- Enviei Não_OK para:"), Blue(eleicaoIDMensagem))
@@ -294,14 +294,11 @@ func enviarMensagemPara(tipoMensagem int, id int) {
 	fmt.Fprintf(conexoesEscrita[index], "%d|%d|%d\n", tipoMensagem, pid.Get(), eleicaoID.Get())
 }
 
-func broadcastEleicao(eleicaoPorLiderEstarMorto bool) {
-	if eleicaoPorLiderEstarMorto {
-		contadorDuranteUltimaEleicao.Set(contadorDuranteUltimaChecagemLider.Get())
-	} else {
-		contadorDuranteUltimaEleicao.Set(contadorMensagem.IncrementAndGet())
-	}
+func broadcastEleicao(contadorQuandoEleicaoComecou int) {
 
-	var numeracaoContador = contadorDuranteUltimaEleicao.Get()
+	contadorDuranteUltimaEleicao.Set(contadorMensagem.IncrementAndGet())
+
+	var numeracaoMensagemEleicao = contadorDuranteUltimaEleicao.Get()
 
 	recebiOK.Set(false)
 
@@ -310,15 +307,15 @@ func broadcastEleicao(eleicaoPorLiderEstarMorto bool) {
 		fmt.Fprintf(conn, "1|%d|%d\n", pid.Get(), eleicaoID.Get())
 	}
 
-	fmt.Println(Blue("Mensagem"), Blue(numeracaoContador), Blue("- Enviei ELEIÇÃO para todos"))
-	fmt.Println(Blue("Mensagem"), Blue(numeracaoContador), Blue("- Aguardando OK..."))
+	fmt.Println(Blue("Mensagem"), Blue(contadorQuandoEleicaoComecou), "|", Blue(numeracaoMensagemEleicao), Blue("- Enviei ELEIÇÃO para todos"))
+	fmt.Println(Blue("Mensagem"), Blue(numeracaoMensagemEleicao), Blue("- Aguardando OK..."))
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(7 * time.Second)
 
 	if !recebiOK.Get() {
-		fmt.Println(BrightRed("Mensagem"), BrightRed(numeracaoContador), BrightRed("- Não recebi OK."))
+		fmt.Println(BrightRed("Mensagem"), BrightRed(numeracaoMensagemEleicao), BrightRed("- Não recebi OK."))
 		broadcastLider()
-		fmt.Println(Blue("Mensagem"), Blue(numeracaoContador), Blue("- Enviei LIDER para todos"))
+		fmt.Println(Blue("Mensagem"), Blue(numeracaoMensagemEleicao), Blue("- Enviei LIDER para todos"))
 	}
 }
 
@@ -358,7 +355,7 @@ func imprimirEstatisticas() {
 		liderID.Get())
 }
 
-func finalizarProcesso(){
+func finalizarProcesso() {
 	fmt.Println("\nFinalizando processo...\n")
 	keyboard.Close()
 	os.Exit(0)

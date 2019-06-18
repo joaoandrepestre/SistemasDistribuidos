@@ -1,12 +1,13 @@
 package safe
 
-import(
+import (
 	"sync"
 	"sync/atomic"
 )
 
 // ThreadSafeInt - interface para impedir condição de corrida em variáveis globais
 type ThreadSafeInt struct {
+	lock  sync.Mutex
 	Value int32
 }
 
@@ -22,18 +23,31 @@ func (t *ThreadSafeInt) Set(v int) {
 
 // IncrementAndGet - incrementa valor em 1 e retorna
 func (t *ThreadSafeInt) IncrementAndGet() int {
-	atomic.StoreInt32(&t.Value, int32(t.Get()+1))
-	return int(atomic.LoadInt32(&t.Value))
+	var temp int
+	t.lock.Lock()
+	temp = t.Get() + 1
+	t.Set(temp)
+	t.lock.Unlock()
+
+	return temp
 }
 
 // Decrement - decrementa o valor em 1
 func (t *ThreadSafeInt) Decrement() {
-	atomic.StoreInt32(&t.Value, int32(t.Get()-1))
+	var temp int
+	t.lock.Lock()
+	temp = t.Get() - 1
+	t.Set(temp)
+	t.lock.Unlock()
 }
 
 // Increment - incrementa o valor em 1
 func (t *ThreadSafeInt) Increment() {
-	atomic.StoreInt32(&t.Value, int32(t.Get()+1))
+	var temp int
+	t.lock.Lock()
+	temp = t.Get() + 1
+	t.Set(temp)
+	t.lock.Unlock()
 }
 
 // ThreadSafeBool - estrutura booleana com operações atômicas
