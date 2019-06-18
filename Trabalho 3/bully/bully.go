@@ -343,8 +343,11 @@ func imprimirEstatisticas() {
 		"Vivo: 		%d enviadas, %d recebidas\n"+
 		"Vivo_OK: 	%d enviadas, %d recebidas\n"+
 		"Morto:		%d enviadas, %d recebidas\n"+
-		"Não_OK: 	%d enviadas, %d recebidas\n\n"+
-		"Processo Líder: %d\n\n",
+		"Não_OK: 	%d enviadas, %d recebidas\n"+
+		"\nESTADO:\n"+
+		"Processo Líder: %d\n"+
+		"Checar líder?   %t\n"+
+		"Nó morto?       %t\n\n",
 		contadorMensagensEnviadas[msgELEICAO-1].Get(), contadorMensagensRecebidas[msgELEICAO-1].Get(),
 		contadorMensagensEnviadas[msgOK-1].Get(), contadorMensagensRecebidas[msgOK-1].Get(),
 		contadorMensagensEnviadas[msgLIDER-1].Get(), contadorMensagensRecebidas[msgLIDER-1].Get(),
@@ -352,7 +355,9 @@ func imprimirEstatisticas() {
 		contadorMensagensEnviadas[msgVIVOOK-1].Get(), contadorMensagensRecebidas[msgVIVOOK-1].Get(),
 		contadorMensagensEnviadas[msgMORTO-1].Get(), contadorMensagensRecebidas[msgMORTO-1].Get(),
 		contadorMensagensEnviadas[msgNAOOK-1].Get(), contadorMensagensRecebidas[msgNAOOK-1].Get(),
-		liderID.Get())
+		liderID.Get(),
+		checarLider.Get(),
+		noMorto.Get())
 }
 
 func finalizarProcesso() {
